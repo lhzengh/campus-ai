@@ -1,7 +1,7 @@
 # Campus AI 需求规格说明书
 
 > 文档状态：基础范围已确认
-> 版本：0.2.1
+> 版本：0.2.2
 > 创建日期：2026-08-19
 > 适用阶段：需求确认与 MVP 规划
 
@@ -151,6 +151,7 @@ flowchart LR
 | FR-006 | Must | Client、Core 和 Connector 应分别构建和运行；关闭 Client 不影响 Core，停止单个 Connector 不影响 Core 与其他 Connector。 |
 | FR-007 | Must | 当前仓库可以保持 Monorepo，但组件间不得引用对方内部模块；跨组件共享仅通过版本化协议或独立发布的软件包。 |
 | FR-008 | Must | Core、Connector SDK、各 Connector 和 Flutter Client 应具有独立依赖声明、测试入口、构建产物和版本。 |
+| FR-009 | Must | 客户端以英文作为完整兼容语言和未知区域设置的回退语言；中文可作为可选展示语言。协议字段、错误码、配置键和 Connector 标识不得随界面语言变化。 |
 
 ### 6.2 信息来源管理
 
@@ -179,6 +180,8 @@ flowchart LR
 | FR-121 | Must | Core 必须校验 Connector ID、版本和协议兼容性，拒绝将注册 ID 与 Manifest 不匹配的服务用于同步。 |
 | FR-122 | Must | Connector 的网络地址和内部认证凭据必须由部署时注册或运行时配置提供，不得编译进 Core 或 Client。 |
 | FR-123 | Should | 官方 Connector 可与 Core 保持在同一仓库开发，但必须可以独立构建镜像、运行测试和发布；第三方 Connector 可位于完全独立的仓库。 |
+| FR-124 | Must | Client 应通过 Core 发现 Connector，并按 Manifest 配置 Schema 生成普通配置表单；不支持的 Schema 类型必须明确提示，不能静默丢弃字段。 |
+| FR-125 | Must | Client 展示认证挑战和手动同步任务状态时只调用 Core；Secret 配置字段、密码和一次性验证码不得进入普通来源配置或客户端持久缓存。 |
 
 ### 6.3 采集与内容处理
 
@@ -533,6 +536,10 @@ docs/
 
 给定两个符合相同协议的 Connector，当其中一个停止、返回不兼容 Manifest 或需要重新认证时，Core 记录可理解状态并只暂停受影响来源；另一个 Connector、Client API、AI 与通知任务继续运行。
 
+### AC-12 Connector 来源配置闭环
+
+给定一个由 Core 注册且可用的 Connector，Client 能根据其 Manifest 生成普通配置表单、创建来源、按通用挑战模型完成人工认证、触发手动同步并轮询任务状态；成功后规范化消息可在收件箱读取，Secret 字段和一次性认证输入不进入普通来源配置。
+
 ## 13. 分阶段实施建议
 
 ### 阶段 0：来源与推送可行性验证
@@ -616,6 +623,7 @@ docs/
 | 0.1.4 | 2026-08-21 | 明确项目为通用 Campus AI；禁止硬编码学校、网址、账号与密码，来源和部署参数全部外置 | 基础范围已确认 |
 | 0.2.0 | 2026-08-21 | 确认 Monorepo 下 Client、Core、Connector SDK 与 Connector 的可拆分边界；新增独立协议、Manifest、配置 Schema、认证挑战、统一输出和兼容性测试要求 | 基础范围已确认 |
 | 0.2.1 | 2026-08-21 | 定义 Core 标准输入为 `CampusItemBatch v1`；明确事实边界、稳定 ID、扩展命名空间、附件访问、游标提交、去重更新和敏感数据禁区 | 基础范围已确认 |
+| 0.2.2 | 2026-08-21 | 明确客户端英文完整支持与英文回退、中文可选且仅属于展示层；确定 Flutter 通过 Core 发现 Connector、动态生成配置表单、处理通用认证挑战并轮询同步任务 | 基础范围已确认 |
 
 ## 附录 A：技术参考
 

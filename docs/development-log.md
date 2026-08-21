@@ -2,6 +2,31 @@
 
 本文件记录项目的重要工作、验证结果与遗留事项。需求变化记录在 `requirements.md`，架构选择后续单独记录在 `adr/`。
 
+## 2026-08-21：打通 Flutter Connector 来源管理闭环
+
+### 已完成
+
+- Flutter 新增 Sources 导航、Connector 可用性列表、来源创建和状态卡片，所有 Connector 操作继续只经过 Core Client API。
+- Client 根据 Connector Manifest 的 JSON Schema 生成 Material 3 配置表单；首批支持字符串、HTTP(S) URL、数字、整数、布尔值、枚举、字符串列表、必填约束和默认值。
+- `x-campus-secret` 字段不进入普通配置；不支持的 Schema 类型显示阻断性错误，不会静默丢弃第三方字段。
+- 实现通用认证挑战界面，可表达密码、短信码、普通文本、布尔确认、扫码/浏览器说明和外部登录链接；挑战响应不写入本地缓存。
+- 实现来源认证状态检查、人工认证、手动同步和单任务轮询；Core 新增 `GET /v1/jobs/{job_id}`。
+- Flutter 消息解析与 `CampusItem` Client API 字段对齐，同时保留 Phase 0 旧字段读取兼容。
+- 客户端英文作为完整兼容回退，中文作为可选展示语言；未知系统语言回退英文，协议标识和配置键不本地化。
+- Compose Worker 显式合并公共 Backend 环境，修复服务级 `environment` 覆盖导致 Worker 丢失 Connector 注册表的问题，并增加回归测试。
+
+### 验证结果
+
+- 37 项 Python 测试通过；Flutter 静态分析无问题，9 项 Flutter 测试通过。
+- 隔离 Compose 栈通过本地无害 HTML Fixture 创建静态来源；认证状态为 `not_required`，手动任务经新单任务接口从 `pending` 变为 `succeeded`。
+- Connector 输出的 `Course registration` 消息以标准 `source_url` / `content_text` 字段入库并可由 Client API 读取；第二次同步成功且消息仍只有一条。
+- 真链路测试发现并修复 Worker Connector 环境继承问题；临时容器、网络和 PostgreSQL Volume 已删除，不包含真实站点或凭据。
+
+### 后续
+
+- 使用私有运行配置并由用户在场验证真实认证门户，不把网址、账号或会话写入仓库。
+- 安装 Android SDK 并完成 FCM 真机测试；随后验证云端 AI 脱敏样本和 Debian 部署。
+
 ## 2026-08-21：定义 Core 标准输入格式
 
 - Core 标准输入确定为版本化 `CampusItemBatch` / `CampusItem`，不直接接收学校页面结构或数据库模型。

@@ -31,7 +31,8 @@
 - FCM 与 UnifiedPush 具有统一通知接口；数据库层按渠道、设备和事件去重。
 - 提供真实来源、AI 数据集和推送批量探测脚本。
 - 创建 Flutter 3.47 三端工程，采用 Material 3、Riverpod、go_router 与 Drift/SQLite。
-- 客户端支持消息同步、本地缓存、已读状态、响应式导航、原文详情和 FCM Token 诊断。
+- 客户端支持消息同步、本地缓存、已读状态、响应式导航、原文详情、FCM Token 诊断，以及通过 Core 完成 Connector 发现、Schema 动态配置、认证挑战和手动同步任务轮询。
+- 客户端以英文作为完整回退语言，提供可选中文展示；协议字段、错误码、配置键和 Connector ID 不参与本地化。
 - FCM 接收日志和指标脚本可计算真机送达率、重复率与 P95 延迟。
 
 ## 3. 自动化结果
@@ -39,15 +40,16 @@
 2026-08-21 最新本地执行：
 
 ```text
-pytest: 36 passed（SDK、两个 Connector 与 Core）
+pytest: 37 passed（SDK、两个 Connector 与 Core）
 aggregate Python coverage: 73%
 flutter analyze: No issues found
-flutter test: 4 passed
+flutter test: 9 passed
 flutter build linux --debug: succeeded
 Alembic 空数据库及带旧消息的 SQLite `0002` 数据库迁移: upgraded to 0003
 Compose: 空 PostgreSQL 18 数据卷启动成功，api/postgres healthy
 Connector: Core 经内部 Bearer Token 发现静态 Connector Manifest；未启动的可选 Connector 返回 unavailable，不影响健康 Connector
 Source API: 通过 Connector Schema 校验并持久化一个仅使用保留示例域名的临时来源
+Source UI/API: Flutter Widget 测试完成 Schema 表单来源创建；隔离 Compose 使用同一配置结构经 Core、Worker 与静态 Connector 完成同步，标准消息可由 Client API 读取
 Worker: fetch_all 任务 1 次成功；相同 dedupe_key 返回同一任务
 Persistence: 容器全部重建后任务仍存在
 Playwright: 独立 browser Connector 镜像内 Chromium 启动并渲染页面成功
@@ -64,12 +66,14 @@ Isolation: Core 镜像确认不包含 Playwright
 - 门户会话密文不包含原始Cookie。
 - Flutter 后端 API 契约解析、Drift 离线缓存与已读状态保留。
 - Flutter 消息列表、详情路由和 Material 3 关键界面。
+- Flutter Connector 发现、动态表单默认值/Secret 隔离、来源创建、通用认证挑战、任务状态和英中展示层。
 - PostgreSQL 18 数据卷挂载、一次性迁移依赖和服务启动次序。
 - API 入队、数据库持久队列、Worker 消费和任务去重的真实容器链路。
 - Playwright 浏览器镜像不只构建成功，Chromium 也已实际启动。
 - Connector SDK 服务包装器、Manifest 身份/主协议版本检查、独立 Token 和第三方兼容性测试。
 - 单个 Connector 不可用时的发现列表故障隔离。
 - 静态 Connector 对越界链接和跨域重定向的阻断。
+- 隔离 Compose 首次暴露并修复 Worker 环境覆盖导致 Connector 注册表丢失的问题；修复后两次同步均成功，数据库只保留一条幂等消息，验证容器、网络和临时卷已删除。
 
 ## 4. 尚需外部输入
 

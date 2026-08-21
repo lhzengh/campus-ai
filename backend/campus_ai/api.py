@@ -51,6 +51,16 @@ def jobs(limit: int = Query(default=100, ge=1, le=500), session: Session = Depen
     return list(list_jobs(session, limit=limit))
 
 
+@app.get("/v1/jobs/{job_id}", response_model=JobView)
+def job(job_id: str, session: Session = Depends(get_session)) -> Job:
+    """Return one job so clients can poll a manual synchronization safely."""
+
+    value = session.get(Job, job_id)
+    if value is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return value
+
+
 @app.post("/v1/jobs/{job_id}/retry", response_model=JobView)
 def retry_job(job_id: str, session: Session = Depends(get_session)) -> Job:
     job = session.get(Job, job_id)

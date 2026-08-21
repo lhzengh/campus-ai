@@ -1,5 +1,11 @@
 name: campus-ai-validation
 
+x-backend-environment: &backend-environment
+  CAMPUS_AI_DATABASE_URL: ${CAMPUS_AI_DATABASE_URL:?Set CAMPUS_AI_DATABASE_URL in .env}
+  CAMPUS_AI_TIMEZONE: ${CAMPUS_AI_TIMEZONE:-Asia/Shanghai}
+  CAMPUS_AI_CONNECTOR_ENDPOINTS: ${CAMPUS_AI_CONNECTOR_ENDPOINTS:?Set CAMPUS_AI_CONNECTOR_ENDPOINTS in .env}
+  CAMPUS_AI_CONNECTOR_SHARED_TOKEN: ${CAMPUS_AI_CONNECTOR_SHARED_TOKEN:?Set CAMPUS_AI_CONNECTOR_SHARED_TOKEN in .env}
+
 x-backend: &backend
   image: campus-ai-backend:${CAMPUS_AI_IMAGE_TAG:-dev}
   build:
@@ -9,11 +15,7 @@ x-backend: &backend
   env_file:
     - path: .env
       required: false
-  environment:
-    CAMPUS_AI_DATABASE_URL: ${CAMPUS_AI_DATABASE_URL:?Set CAMPUS_AI_DATABASE_URL in .env}
-    CAMPUS_AI_TIMEZONE: ${CAMPUS_AI_TIMEZONE:-Asia/Shanghai}
-    CAMPUS_AI_CONNECTOR_ENDPOINTS: ${CAMPUS_AI_CONNECTOR_ENDPOINTS:?Set CAMPUS_AI_CONNECTOR_ENDPOINTS in .env}
-    CAMPUS_AI_CONNECTOR_SHARED_TOKEN: ${CAMPUS_AI_CONNECTOR_SHARED_TOKEN:?Set CAMPUS_AI_CONNECTOR_SHARED_TOKEN in .env}
+  environment: *backend-environment
   restart: unless-stopped
 
 services:
@@ -65,7 +67,9 @@ services:
       connector-static:
         condition: service_healthy
     environment:
-      CAMPUS_AI_DATABASE_URL: ${CAMPUS_AI_DATABASE_URL:?Set CAMPUS_AI_DATABASE_URL in .env}
+      # YAML mapping merges are explicit because a service-level environment
+      # replaces the environment inherited from the shared service anchor.
+      <<: *backend-environment
       CAMPUS_AI_JOB_KINDS: fetch_all,sync_source,fetch_source,browser_fetch,analyze_message
 
   scheduler:

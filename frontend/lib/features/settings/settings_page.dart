@@ -1,4 +1,5 @@
 import 'package:campus_ai_client/core/app_config.dart';
+import 'package:campus_ai_client/core/app_localizations.dart';
 import 'package:campus_ai_client/services/push_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,51 +15,55 @@ class SettingsPage extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       children: [
         _SectionCard(
-          title: '服务端',
+          title: context.strings.server,
           icon: Icons.dns_outlined,
           children: [
             ListTile(
-              title: const Text('API 地址'),
+              title: Text(context.strings.apiAddress),
               subtitle: SelectableText(AppConfig.apiBaseUrl),
             ),
           ],
         ),
         const SizedBox(height: 12),
         _SectionCard(
-          title: 'Android 推送',
+          title: context.strings.androidPush,
           icon: Icons.notifications_active_outlined,
           children: [
             push.when(
-              loading: () => const ListTile(
-                leading: CircularProgressIndicator(),
-                title: Text('检查 FCM 配置…'),
+              loading: () => ListTile(
+                leading: const CircularProgressIndicator(),
+                title: Text(context.strings.checkingFcm),
               ),
               error: (error, stack) => ListTile(
-                title: const Text('FCM 检查失败'),
+                title: Text(context.strings.fcmCheckFailed),
                 subtitle: Text(error.toString()),
               ),
               data: (status) => Column(
                 children: [
                   ListTile(
-                    title: Text(status.title),
-                    subtitle: Text(status.detail),
+                    title: Text(context.strings.pushTitle(status.kind)),
+                    subtitle: Text(
+                      context.strings.pushDetail(status.kind, status.detail),
+                    ),
                     trailing: IconButton(
-                      tooltip: '重新检查',
+                      tooltip: context.strings.refresh,
                       onPressed: () => ref.invalidate(pushStatusProvider),
                       icon: const Icon(Icons.refresh),
                     ),
                   ),
                   if (status.token case final token?)
                     ListTile(
-                      title: const Text('设备 Token'),
+                      title: Text(context.strings.deviceToken),
                       subtitle: SelectableText(token),
                       trailing: IconButton(
-                        tooltip: '复制 Token',
+                        tooltip: context.strings.copyToken,
                         onPressed: () async {
                           await Clipboard.setData(ClipboardData(text: token));
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Token 已复制')),
+                              SnackBar(
+                                content: Text(context.strings.tokenCopied),
+                              ),
                             );
                           }
                         },
@@ -71,17 +76,17 @@ class SettingsPage extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 12),
-        const _SectionCard(
-          title: '隐私边界',
+        _SectionCard(
+          title: context.strings.privacyBoundary,
           icon: Icons.shield_outlined,
           children: [
             ListTile(
-              title: Text('云端 AI'),
-              subtitle: Text('由服务端通过 OpenAI 兼容 API 调用；客户端不保存模型密钥。'),
+              title: Text(context.strings.cloudAi),
+              subtitle: Text(context.strings.cloudAiDetail),
             ),
             ListTile(
               title: Text('MCP'),
-              subtitle: Text('当前不承担模型推理，仅为未来受限工具接入预留。'),
+              subtitle: Text(context.strings.mcpDetail),
             ),
           ],
         ),

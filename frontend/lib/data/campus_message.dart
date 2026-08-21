@@ -22,13 +22,15 @@ class CampusMessage {
   final bool isRead;
 
   factory CampusMessage.fromJson(Map<String, Object?> json) {
-    final rawMetadata = json['metadata_json'];
+    // Prefer the current Client API names while accepting the Phase 0 aliases
+    // so an older Core can still populate the local inbox during upgrades.
+    final rawMetadata = json['extensions_json'] ?? json['metadata_json'];
     return CampusMessage(
       id: json['id']! as String,
       sourceId: json['source_id']! as String,
-      url: json['url']! as String,
+      url: (json['source_url'] ?? json['url'])! as String,
       title: json['title']! as String,
-      body: json['body']! as String,
+      body: (json['content_text'] ?? json['body'])! as String,
       publishedAt: _parseDate(json['published_at']),
       fetchedAt: _parseDate(json['fetched_at']) ?? DateTime.now().toUtc(),
       metadata: rawMetadata is Map

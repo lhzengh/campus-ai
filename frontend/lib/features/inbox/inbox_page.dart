@@ -1,3 +1,4 @@
+import 'package:campus_ai_client/core/app_localizations.dart';
 import 'package:campus_ai_client/data/campus_message.dart';
 import 'package:campus_ai_client/features/inbox/inbox_controller.dart';
 import 'package:flutter/material.dart';
@@ -25,8 +26,9 @@ class _InboxPageState extends ConsumerState<InboxPage> {
 
     ref.listen(inboxControllerProvider, (previous, next) {
       if (next.hasError && previous?.error != next.error) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('同步失败：${next.error}')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.strings.inboxSyncFailed(next.error!))),
+        );
       }
     });
 
@@ -113,12 +115,12 @@ class _EmptyState extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         Text(
-          '暂无校园消息',
+          context.strings.emptyInbox,
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 8),
-        const Text('下拉刷新，或先启动服务端并配置消息来源。', textAlign: TextAlign.center),
+        Text(context.strings.emptyInboxHint, textAlign: TextAlign.center),
       ],
     );
   }
@@ -140,12 +142,15 @@ class _ErrorState extends StatelessWidget {
           children: [
             const Icon(Icons.cloud_off_outlined, size: 56),
             const SizedBox(height: 16),
-            Text('无法读取本地消息：$error', textAlign: TextAlign.center),
+            Text(
+              context.strings.localInboxFailed(error),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh),
-              label: const Text('重试'),
+              label: Text(context.strings.retry),
             ),
           ],
         ),

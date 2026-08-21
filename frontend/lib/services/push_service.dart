@@ -11,9 +11,10 @@ final pushStatusProvider = FutureProvider<PushStatus>(
 );
 
 class PushStatus {
-  const PushStatus({required this.title, required this.detail, this.token});
+  const PushStatus({required this.kind, this.detail = '', this.token});
 
-  final String title;
+  /// Stable status code translated only by the presentation layer.
+  final String kind;
   final String detail;
   final String? token;
 }
@@ -27,23 +28,14 @@ class PushService {
 
   Future<PushStatus> initialize() async {
     if (defaultTargetPlatform != TargetPlatform.android) {
-      return const PushStatus(
-        title: '当前平台不使用 FCM',
-        detail: 'Linux 与 Windows 客户端保留应用内同步；FCM 仅在 Android 启用。',
-      );
+      return const PushStatus(kind: 'unsupported_platform');
     }
     if (!AppConfig.enableFcm) {
-      return const PushStatus(
-        title: 'FCM 未启用',
-        detail: '使用 ENABLE_FCM 和 Firebase 的四项 Dart Define 启动应用后再检查。',
-      );
+      return const PushStatus(kind: 'disabled');
     }
     final options = AppConfig.firebaseOptions;
     if (options == null) {
-      return const PushStatus(
-        title: 'FCM 配置不完整',
-        detail: '缺少 API Key、App ID、Project ID 或 Messaging Sender ID。',
-      );
+      return const PushStatus(kind: 'incomplete');
     }
 
     try {
@@ -63,12 +55,12 @@ class PushService {
         _listenersRegistered = true;
       }
       return PushStatus(
-        title: token == null ? '未取得 FCM Token' : 'FCM 已就绪',
-        detail: '通知权限：${permission.authorizationStatus.name}',
+        kind: token == null ? 'missing_token' : 'ready',
+        detail: permission.authorizationStatus.name,
         token: token,
       );
     } catch (error) {
-      return PushStatus(title: 'FCM 初始化失败', detail: error.toString());
+      return PushStatus(kind: 'failed', detail: error.toString());
     }
   }
 }

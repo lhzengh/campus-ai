@@ -20,6 +20,14 @@ def test_compose_requires_external_database_configuration() -> None:
     assert ":-postgresql" not in compose
 
 
+def test_worker_keeps_connector_runtime_configuration() -> None:
+    compose = (REPOSITORY_ROOT / "compose.yaml").read_text(encoding="utf-8")
+    worker_section = compose.split("  worker:", maxsplit=1)[1].split("  scheduler:", maxsplit=1)[0]
+
+    assert "<<: *backend-environment" in worker_section
+    assert "CAMPUS_AI_JOB_KINDS" in worker_section
+
+
 def test_flutter_api_endpoint_has_no_compiled_default() -> None:
     config = (REPOSITORY_ROOT / "frontend/lib/core/app_config.dart").read_text(encoding="utf-8")
     api_declaration = config.split("static const enableFcm", maxsplit=1)[0]
@@ -62,7 +70,7 @@ def test_connectors_do_not_import_core_or_contain_institution_defaults() -> None
         content = path.read_text(encoding="utf-8")
         if re.search(r"(?:from|import)\s+campus_ai(?:\.|\s|$)", content):
             core_imports.append(str(path.relative_to(REPOSITORY_ROOT)))
-        if "institution.invalid" in content.lower() or "institution name" in content.lower():
+        if re.search(r"https?://[^/\s\"']*\.edu(?:\.cn)?(?:[/:])", content, re.IGNORECASE):
             institution_defaults.append(str(path.relative_to(REPOSITORY_ROOT)))
     assert core_imports == []
     assert institution_defaults == []

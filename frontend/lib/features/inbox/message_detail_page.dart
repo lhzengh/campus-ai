@@ -1,3 +1,4 @@
+import 'package:campus_ai_client/core/app_localizations.dart';
 import 'package:campus_ai_client/features/inbox/inbox_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,10 +29,11 @@ class _MessageDetailPageState extends ConsumerState<MessageDetailPage> {
     final message = ref.watch(messageProvider(widget.messageId));
     return message.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stack) => Center(child: Text('读取消息失败：$error')),
+      error: (error, stack) =>
+          Center(child: Text(context.strings.messageReadFailed(error))),
       data: (item) {
         if (item == null) {
-          return const Center(child: Text('消息不存在或尚未同步'));
+          return Center(child: Text(context.strings.messageMissing));
         }
         return ListView(
           padding: const EdgeInsets.all(24),
@@ -41,7 +43,7 @@ class _MessageDetailPageState extends ConsumerState<MessageDetailPage> {
               child: TextButton.icon(
                 onPressed: context.pop,
                 icon: const Icon(Icons.arrow_back),
-                label: const Text('返回消息列表'),
+                label: Text(context.strings.backToInbox),
               ),
             ),
             const SizedBox(height: 8),
@@ -54,14 +56,17 @@ class _MessageDetailPageState extends ConsumerState<MessageDetailPage> {
                   avatar: const Icon(Icons.source_outlined, size: 18),
                   label: Text(item.sourceId),
                 ),
-                const Chip(
-                  avatar: Icon(Icons.auto_awesome_outlined, size: 18),
-                  label: Text('AI 分析待同步'),
+                Chip(
+                  avatar: const Icon(Icons.auto_awesome_outlined, size: 18),
+                  label: Text(context.strings.pendingAi),
                 ),
               ],
             ),
             const SizedBox(height: 20),
-            Text('原文信息', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              context.strings.originalContent,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 8),
             SelectableText(item.body),
             const SizedBox(height: 24),
@@ -73,7 +78,7 @@ class _MessageDetailPageState extends ConsumerState<MessageDetailPage> {
                   mode: LaunchMode.externalApplication,
                 ),
                 icon: const Icon(Icons.open_in_new),
-                label: const Text('打开学校原文'),
+                label: Text(context.strings.openOriginal),
               ),
             ),
           ],

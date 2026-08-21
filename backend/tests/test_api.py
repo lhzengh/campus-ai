@@ -3,7 +3,17 @@ from __future__ import annotations
 from campus_connector_sdk import AuthResult, AuthState, ConnectorManifest
 from sqlalchemy.orm import Session
 
-from campus_ai.api import app, connectors as list_connectors, create_job, create_source, jobs, live, ready, sources
+from campus_ai.api import (
+    app,
+    connectors as list_connectors,
+    create_job,
+    create_source,
+    job,
+    jobs,
+    live,
+    ready,
+    sources,
+)
 from campus_ai.schemas import JobCreate, SourceCreate
 
 
@@ -53,10 +63,12 @@ def test_health_and_job_api(session: Session) -> None:
     listed = jobs(limit=100, session=session)
     assert len(listed) == 1
     assert listed[0].dedupe_key == "fetch-all:2026-08-19"
+    assert job(created.id, session).id == created.id
 
     paths = app.openapi()["paths"]
     assert "/health/live" in paths
     assert "/v1/jobs" in paths
+    assert "/v1/jobs/{job_id}" in paths
     assert "/v1/connectors" in paths
     assert "/v1/sources" in paths
 

@@ -17,6 +17,7 @@ The project is currently in **Phase 0: technical validation**. Source Connectors
 - Validates AI output against a structured schema before storing it.
 - Extracts summaries, relevance, importance, urgency, audiences, action items, and deadlines.
 - Provides an application inbox with offline caching and read-state preservation.
+- Lets Flutter clients discover Connectors, generate source forms from JSON Schema, complete generic authentication challenges, and follow manual sync jobs through Core.
 - Supports FCM and UnifiedPush-compatible notification transports behind a common interface.
 - Records architectural decisions, validation results, requirements, and development history in Markdown.
 
@@ -46,7 +47,7 @@ AI inference runs through a server-side, OpenAI-compatible API adapter. Provider
 
 ### One client codebase
 
-The Flutter application uses Material 3 and responsive navigation for Linux, Windows, and Android. Riverpod manages application state, `go_router` handles navigation, and Drift/SQLite provides the local offline cache.
+The Flutter application uses Material 3 and responsive navigation for Linux, Windows, and Android. Riverpod manages application state, `go_router` handles navigation, and Drift/SQLite provides the local offline cache. English is the complete compatibility fallback; optional Chinese localization is isolated to presentation strings, while API fields, error codes, and Connector identifiers remain stable English tokens.
 
 ## Architecture
 
@@ -73,7 +74,7 @@ Core remains a modular monolith: API, worker, and scheduler processes share one 
 | --- | --- |
 | `postgres` | Persistent messages, analyses, jobs, sources, and delivery records |
 | `migrate` | One-shot Alembic migration; other backend services wait for it to succeed |
-| `api` | FastAPI health, message, and job endpoints |
+| `api` | FastAPI health, message, job, Connector discovery, source, and authentication endpoints |
 | `worker` | Calls registered Connectors and runs AI analysis jobs |
 | `scheduler` | Daily collection job creation |
 | `connector-static` | Independent generic HTTP/CSS-selector Connector |
@@ -104,16 +105,17 @@ The Flutter application is installed directly on each client device and is not p
 
 | Area | Status |
 | --- | --- |
-| Python tests | 36 passing across SDK, Connectors, and Core; 73% aggregate coverage |
+| Python tests | 37 passing across SDK, Connectors, and Core; 73% aggregate coverage |
 | PostgreSQL migrations | Clean and populated revision `0002` databases upgraded through CampusItem revision `0003` |
 | Compose startup | Passed from a clean PostgreSQL 18 volume |
 | Persistent job queue | Enqueue, consume, deduplicate, and container-recreation persistence passed |
 | Playwright Connector | Independent image built successfully; Chromium launched and rendered a page |
-| Flutter analysis and tests | Clean analysis, 4 tests passing |
+| Flutter analysis and tests | Clean analysis, 9 tests passing, including dynamic source forms, auth challenges, and optional Chinese presentation strings |
 | Linux client | Debug bundle built successfully |
 | Android client | Project generated; blocked locally on Android SDK and Firebase/device setup |
 | Windows client | Project generated; build validation awaits a Windows runner |
 | Connector architecture | Protocol, SDK, Core client, runtime registry, static/browser examples, auth challenge models, and conformance tests implemented |
+| Source onboarding | Flutter Connector discovery, Schema-driven configuration, source status, generic auth challenges, manual sync, and job polling implemented; isolated Compose flow passed |
 | Authenticated portal | Connector-owned encrypted-session tests passed; a real user-assisted source flow is pending |
 | Cloud AI | Mock contract passed; real provider and labeled sample evaluation pending |
 | Push delivery | Adapters and probes implemented; real FCM/UnifiedPush delivery pending |
@@ -231,7 +233,7 @@ compose.yaml             Single-host service orchestration
 | **3 — Cross-platform MVP** | Complete inbox, search, filters, source management, settings, offline changes, synchronization, and Windows/Linux/Android packages | Core acceptance scenarios pass on all three platforms |
 | **4 — Reliability and experience** | Backup/restore drills, monitoring, production authentication, TLS, accessibility, performance work, and parser regression fixtures | Production checklist passes and recovery is demonstrated from a clean environment |
 
-Immediate next steps are to finish fresh container/CI validation for the separated Connectors, generate the Flutter-side source configuration flow from Connector schemas, validate a runtime-configured portal flow with the user present, install the Android SDK, run device push tests, evaluate a cloud model on anonymized examples, and move the validated stack to the fixed-IP Debian host.
+Immediate next steps are to validate a runtime-configured portal flow with the user present, install the Android SDK, run device push tests, evaluate a cloud model on anonymized examples, validate a sustainable approved public-channel source, and move the validated stack to the fixed-IP Debian host.
 
 ## Documentation
 

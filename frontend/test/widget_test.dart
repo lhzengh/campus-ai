@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('shows cached messages and opens message detail', (tester) async {
+    appRouter.go('/');
     final store = _FakeMessageStore([
       CampusMessage(
         id: 'message-1',
@@ -33,7 +34,7 @@ void main() {
     await tester.tap(find.text('选课确认通知'));
     await tester.pumpAndSettle();
 
-    expect(find.text('原文信息'), findsOneWidget);
+    expect(find.text('Original content'), findsOneWidget);
     expect(find.text('请在本周五前完成确认。'), findsOneWidget);
     expect(store.readIds, contains('message-1'));
   });

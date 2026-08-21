@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 from typing import Any
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, JSON, String, Text, Time, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from campus_ai.db import Base
@@ -34,10 +34,25 @@ class Source(Base):
     credential_refs: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     sync_cursor: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     auth_status: Mapped[str] = mapped_column(String(30), default="unknown")
+    schedule_mode: Mapped[str] = mapped_column(String(20), default="daily")
+    schedule_time: Mapped[time] = mapped_column(Time, default=lambda: time(hour=7))
+    schedule_timezone: Mapped[str] = mapped_column(String(100), default="Asia/Shanghai")
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    @property
+    def schedule(self) -> dict[str, str]:
+        """Expose the normalized schedule without leaking persistence details."""
+
+        return {
+            "mode": self.schedule_mode,
+            "time": self.schedule_time.isoformat(timespec="minutes"),
+            "timezone": self.schedule_timezone,
+        }
 
 
 class Message(Base):
@@ -97,9 +112,27 @@ class Job(Base):
     max_attempts: Mapped[int] = mapped_column(Integer, default=3)
     available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    @property
+    def duration_ms(self) -> int | None:
+        """Return the final-attempt duration for API diagnostics."""
+
+        if self.started_at is None or self.finished_at is None:
+            return None
+        started_at = self.started_at
+        finished_at = self.finished_at
+        # SQLite drops timezone metadata even for timezone-aware columns.
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+        if finished_at.tzinfo is None:
+            finished_at = finished_at.replace(tzinfo=timezone.utc)
+        return max(0, round((finished_at - started_at).total_seconds() * 1000))
 
 
 class NotificationDelivery(Base):

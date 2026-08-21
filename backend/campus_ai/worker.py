@@ -27,12 +27,12 @@ def run_forever() -> None:
                 continue
             try:
                 handler = HANDLERS[job.kind]
-                handler(session, job.payload)
+                result = handler(session, job.payload)
             except Exception as exc:
                 logger.exception("job_failed id=%s kind=%s", job.id, job.kind)
                 fail_job(session, job, exc)
             else:
-                complete_job(session, job)
+                complete_job(session, job, result)
                 logger.info("job_completed id=%s kind=%s", job.id, job.kind)
 
 

@@ -106,6 +106,11 @@ void main() {
         final body = jsonDecode(request.body) as Map<String, dynamic>;
         expect(body['connector_id'], 'example.static');
         expect(body['config'], {'url': 'https://example.test/notices'});
+        expect(body['schedule'], {
+          'mode': 'daily',
+          'time': '07:00',
+          'timezone': 'Asia/Shanghai',
+        });
         return http.Response(jsonEncode(_sourceJson()), 201);
       }
       if (request.url.path.endsWith('/auth/respond')) {
@@ -147,15 +152,66 @@ void main() {
     expect(completed.isTerminal, isTrue);
     expect(requests, hasLength(4));
   });
+
+  test('updates, checks, previews, archives, and restores a source', () async {
+    final methods = <String>[];
+    final client = MockClient((request) async {
+      methods.add('${request.method} ${request.url.path}');
+      if (request.method == 'PATCH') {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(body, {'enabled': false});
+        return http.Response(jsonEncode(_sourceJson(enabled: false)), 200);
+      }
+      if (request.url.path.endsWith('/check')) {
+        return http.Response(
+          jsonEncode({
+            'connector_status': 'available',
+            'config_status': 'valid',
+            'auth_status': 'not_required',
+            'checked_at': '2026-08-21T01:00:00Z',
+          }),
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/preview')) {
+        return http.Response(jsonEncode(_jobJson('pending')), 202);
+      }
+      if (request.method == 'DELETE') return http.Response('', 204);
+      if (request.url.path.endsWith('/restore')) {
+        return http.Response(jsonEncode(_sourceJson(enabled: false)), 200);
+      }
+      fail('Unexpected request: ${request.method} ${request.url}');
+    });
+    final api = CampusApi(baseUrl: 'https://campus.test', client: client);
+    addTearDown(api.close);
+
+    final updated = await api.updateSource(
+      sourceId: 'source-1',
+      enabled: false,
+    );
+    final checked = await api.checkSource('source-1');
+    final preview = await api.previewSource('source-1');
+    await api.archiveSource('source-1');
+    final restored = await api.restoreSource('source-1');
+
+    expect(updated.enabled, isFalse);
+    expect(checked.connectorStatus, 'available');
+    expect(preview.kind, 'sync_source');
+    expect(restored.enabled, isFalse);
+    expect(methods, hasLength(5));
+  });
 }
 
-Map<String, Object?> _sourceJson() => {
+Map<String, Object?> _sourceJson({bool enabled = true}) => {
   'id': 'source-1',
   'name': 'Public notices',
   'connector_id': 'example.static',
   'connector_version': '1.0.0',
-  'enabled': true,
+  'enabled': enabled,
   'config': {'url': 'https://example.test/notices'},
+  'schedule': {'mode': 'daily', 'time': '07:00', 'timezone': 'Asia/Shanghai'},
+  'next_run_at': '2026-08-22T23:00:00Z',
+  'archived_at': null,
   'auth_status': 'unknown',
   'sync_cursor': {},
   'last_success_at': null,
@@ -173,5 +229,9 @@ Map<String, Object?> _jobJson(String status) => {
   'attempts': status == 'succeeded' ? 1 : 0,
   'max_attempts': 3,
   'available_at': '2026-08-21T00:00:00Z',
+  'started_at': status == 'succeeded' ? '2026-08-21T00:00:01Z' : null,
+  'finished_at': status == 'succeeded' ? '2026-08-21T00:00:02Z' : null,
+  'duration_ms': status == 'succeeded' ? 1000 : null,
+  'result': status == 'succeeded' ? {'items_seen': 1} : {},
   'last_error': null,
 };

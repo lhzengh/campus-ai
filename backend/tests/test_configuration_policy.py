@@ -26,6 +26,7 @@ def test_worker_keeps_connector_runtime_configuration() -> None:
 
     assert "<<: *backend-environment" in worker_section
     assert "CAMPUS_AI_JOB_KINDS" in worker_section
+    assert "preview_source" in worker_section
 
 
 def test_flutter_api_endpoint_has_no_compiled_default() -> None:

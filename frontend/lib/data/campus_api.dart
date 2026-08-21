@@ -66,8 +66,13 @@ class CampusApi {
         .toList(growable: false);
   }
 
-  Future<List<SourceInstance>> fetchSources() async {
-    final payload = await _request('GET', '/v1/sources');
+  Future<List<SourceInstance>> fetchSources({
+    bool includeArchived = false,
+  }) async {
+    final payload = await _request(
+      'GET',
+      '/v1/sources?include_archived=$includeArchived',
+    );
     if (payload is! List) {
       throw const CampusApiException(
         'The sources endpoint did not return an array.',
@@ -83,6 +88,7 @@ class CampusApi {
     required String connectorId,
     required JsonMap config,
     bool enabled = true,
+    SourceScheduleData schedule = SourceScheduleData.dailyDefault,
   }) async {
     final payload = await _request(
       'POST',
@@ -92,9 +98,51 @@ class CampusApi {
         'connector_id': connectorId,
         'config': config,
         'enabled': enabled,
+        'schedule': schedule.toJson(),
       },
     );
     return SourceInstance.fromJson(_requiredMap(payload, 'Create source'));
+  }
+
+  Future<SourceInstance> updateSource({
+    required String sourceId,
+    String? name,
+    JsonMap? config,
+    bool? enabled,
+    SourceScheduleData? schedule,
+  }) async {
+    final body = <String, Object?>{
+      'name': ?name,
+      'config': ?config,
+      'enabled': ?enabled,
+      if (schedule != null) 'schedule': schedule.toJson(),
+    };
+    final payload = await _request(
+      'PATCH',
+      '/v1/sources/${Uri.encodeComponent(sourceId)}',
+      body: body,
+    );
+    return SourceInstance.fromJson(_requiredMap(payload, 'Update source'));
+  }
+
+  Future<void> archiveSource(String sourceId) async {
+    await _request('DELETE', '/v1/sources/${Uri.encodeComponent(sourceId)}');
+  }
+
+  Future<SourceInstance> restoreSource(String sourceId) async {
+    final payload = await _request(
+      'POST',
+      '/v1/sources/${Uri.encodeComponent(sourceId)}/restore',
+    );
+    return SourceInstance.fromJson(_requiredMap(payload, 'Restore source'));
+  }
+
+  Future<SourceCheckData> checkSource(String sourceId) async {
+    final payload = await _request(
+      'POST',
+      '/v1/sources/${Uri.encodeComponent(sourceId)}/check',
+    );
+    return SourceCheckData.fromJson(_requiredMap(payload, 'Check source'));
   }
 
   Future<AuthResultData> fetchAuthStatus(String sourceId) async {
@@ -138,6 +186,14 @@ class CampusApi {
       '/v1/sources/${Uri.encodeComponent(sourceId)}/sync',
     );
     return CampusJob.fromJson(_requiredMap(payload, 'Sync job'));
+  }
+
+  Future<CampusJob> previewSource(String sourceId) async {
+    final payload = await _request(
+      'POST',
+      '/v1/sources/${Uri.encodeComponent(sourceId)}/preview',
+    );
+    return CampusJob.fromJson(_requiredMap(payload, 'Preview job'));
   }
 
   Future<CampusJob> fetchJob(String jobId) async {

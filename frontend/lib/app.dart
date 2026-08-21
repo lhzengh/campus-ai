@@ -32,6 +32,11 @@ final appRouter = GoRouter(
           ),
         ),
         GoRoute(
+          path: '/sources/:sourceId/edit',
+          builder: (context, state) =>
+              SourceCreatePage(sourceId: state.pathParameters['sourceId']!),
+        ),
+        GoRoute(
           path: '/settings',
           builder: (context, state) => const SettingsPage(),
         ),

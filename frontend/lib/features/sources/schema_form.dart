@@ -8,12 +8,14 @@ class DynamicConfigForm extends StatefulWidget {
     required this.schema,
     required this.formKey,
     required this.onChanged,
+    this.initialValues = const {},
     super.key,
   });
 
   final JsonMap schema;
   final GlobalKey<FormState> formKey;
   final ValueChanged<JsonMap> onChanged;
+  final JsonMap initialValues;
 
   @override
   State<DynamicConfigForm> createState() => _DynamicConfigFormState();
@@ -42,7 +44,9 @@ class _DynamicConfigFormState extends State<DynamicConfigForm> {
       final name = entry.key;
       final property = entry.value;
       if (property['x-campus-secret'] == true) continue;
-      final defaultValue = property['default'];
+      final defaultValue = widget.initialValues.containsKey(name)
+          ? widget.initialValues[name]
+          : property['default'];
       if (defaultValue != null) _values[name] = defaultValue;
       final type = _primaryType(property['type']);
       if (type == 'boolean' &&

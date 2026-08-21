@@ -70,7 +70,7 @@ services:
       # YAML mapping merges are explicit because a service-level environment
       # replaces the environment inherited from the shared service anchor.
       <<: *backend-environment
-      CAMPUS_AI_JOB_KINDS: fetch_all,sync_source,fetch_source,browser_fetch,analyze_message
+      CAMPUS_AI_JOB_KINDS: fetch_all,sync_source,preview_source,fetch_source,browser_fetch,analyze_message
 
   scheduler:
     <<: *backend

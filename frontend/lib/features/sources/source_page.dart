@@ -33,6 +33,14 @@ class SourcePage extends ConsumerWidget {
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
                     ),
+                    FilterChip(
+                      selected: state.showArchived,
+                      label: Text(context.strings.showArchived),
+                      onSelected: ref
+                          .read(sourceControllerProvider.notifier)
+                          .setShowArchived,
+                    ),
+                    const SizedBox(width: 8),
                     FilledButton.icon(
                       onPressed: () => _chooseConnector(context, state),
                       icon: const Icon(Icons.add),
@@ -137,12 +145,43 @@ class _SourceCard extends ConsumerWidget {
                   ),
                 ),
                 _StatusChip(
-                  icon: _authIcon(source.authStatus),
-                  label: context.strings.authState(source.authStatus),
+                  icon: source.isArchived
+                      ? Icons.archive_outlined
+                      : _authIcon(source.authStatus),
+                  label: source.isArchived
+                      ? context.strings.archived
+                      : context.strings.authState(source.authStatus),
                 ),
               ],
             ),
             const SizedBox(height: 12),
+            Text(
+              context.strings.sourceSchedule(
+                source.schedule.mode,
+                source.schedule.time,
+                source.schedule.timezone,
+              ),
+            ),
+            if (source.nextRunAt case final nextRun?) ...[
+              const SizedBox(height: 4),
+              Text(context.strings.nextRunAt(_formatDate(nextRun))),
+            ],
+            const SizedBox(height: 6),
+            Material(
+              type: MaterialType.transparency,
+              child: SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  source.enabled
+                      ? context.strings.enabled
+                      : context.strings.disabled,
+                ),
+                value: source.enabled,
+                onChanged: source.isArchived
+                    ? null
+                    : (value) => _setEnabled(context, ref, value),
+              ),
+            ),
             Text(
               source.lastSuccessAt == null
                   ? context.strings.neverSynced
@@ -189,44 +228,181 @@ class _SourceCard extends ConsumerWidget {
                     ),
                 ],
               ),
-            ],
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.end,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: () => _checkAuth(context, ref),
-                  icon: const Icon(Icons.verified_user_outlined),
-                  label: Text(context.strings.checkAuth),
-                ),
-                if (manifest?.supportsUserAssistedAuth == true)
-                  OutlinedButton.icon(
-                    onPressed: () => _beginAuth(context, ref),
-                    icon: const Icon(Icons.login),
-                    label: Text(context.strings.beginAuth),
-                  ),
-                FilledButton.icon(
-                  onPressed: _jobBusy ? null : () => _sync(context, ref),
-                  icon: const Icon(Icons.sync),
-                  label: Text(context.strings.manualSync),
+              if (job!.isTerminal && job!.result.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  context.strings.jobResult(_jobSummary(job!)),
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
-            ),
+            ],
+            const SizedBox(height: 12),
+            if (source.isArchived)
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  onPressed: () => _restore(context, ref),
+                  icon: const Icon(Icons.unarchive_outlined),
+                  label: Text(context.strings.restore),
+                ),
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.end,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _checkConnection(context, ref),
+                    icon: const Icon(Icons.cable_outlined),
+                    label: Text(context.strings.connectionCheck),
+                  ),
+                  if (manifest?.supportsUserAssistedAuth == true)
+                    OutlinedButton.icon(
+                      onPressed: () => _beginAuth(context, ref),
+                      icon: const Icon(Icons.login),
+                      label: Text(context.strings.beginAuth),
+                    ),
+                  OutlinedButton.icon(
+                    onPressed: _jobBusy || !source.enabled
+                        ? null
+                        : () => _preview(context, ref),
+                    icon: const Icon(Icons.preview_outlined),
+                    label: Text(context.strings.preview),
+                  ),
+                  FilledButton.icon(
+                    onPressed: _jobBusy || !source.enabled
+                        ? null
+                        : () => _sync(context, ref),
+                    icon: const Icon(Icons.sync),
+                    label: Text(context.strings.manualSync),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: MaterialLocalizations.of(context)
+                        .moreButtonTooltip,
+                    onSelected: (value) => _menuAction(context, ref, value),
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'edit',
+                        child: ListTile(
+                          leading: const Icon(Icons.edit_outlined),
+                          title: Text(context.strings.editSource),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'archive',
+                        child: ListTile(
+                          leading: const Icon(Icons.archive_outlined),
+                          title: Text(context.strings.archive),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
           ],
         ),
       ),
     );
   }
 
-  Future<void> _checkAuth(BuildContext context, WidgetRef ref) async {
+  Future<void> _checkConnection(BuildContext context, WidgetRef ref) async {
     try {
-      final result = await ref
-          .read(sourceControllerProvider.notifier)
-          .checkAuth(source.id);
+      await ref.read(sourceControllerProvider.notifier).checkSource(source.id);
       if (!context.mounted) return;
-      _showResult(context, result);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.strings.connectionReady)));
+    } catch (error) {
+      if (context.mounted) _showError(context, error);
+    }
+  }
+
+  Future<void> _setEnabled(
+    BuildContext context,
+    WidgetRef ref,
+    bool enabled,
+  ) async {
+    try {
+      await ref
+          .read(sourceControllerProvider.notifier)
+          .updateSource(sourceId: source.id, enabled: enabled);
+    } catch (error) {
+      if (context.mounted) _showError(context, error);
+    }
+  }
+
+  Future<void> _preview(BuildContext context, WidgetRef ref) async {
+    try {
+      final job = await ref
+          .read(sourceControllerProvider.notifier)
+          .previewSource(source.id);
+      if (!context.mounted) return;
+      if (job.status == 'failed') {
+        throw StateError(job.lastError ?? context.strings.failed);
+      }
+      await showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (context) => _PreviewSheet(job: job),
+      );
+    } catch (error) {
+      if (context.mounted) _showError(context, error);
+    }
+  }
+
+  Future<void> _menuAction(
+    BuildContext context,
+    WidgetRef ref,
+    String value,
+  ) async {
+    if (value == 'edit') {
+      context.go('/sources/${Uri.encodeComponent(source.id)}/edit');
+      return;
+    }
+    if (value != 'archive') return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.strings.archiveSource),
+        content: Text(context.strings.archiveSourceHint),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(context.strings.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(context.strings.archive),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await ref
+          .read(sourceControllerProvider.notifier)
+          .archiveSource(source.id);
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.strings.sourceArchived)));
+      }
+    } catch (error) {
+      if (context.mounted) _showError(context, error);
+    }
+  }
+
+  Future<void> _restore(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref
+          .read(sourceControllerProvider.notifier)
+          .restoreSource(source.id);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.strings.sourceRestored)));
     } catch (error) {
       if (context.mounted) _showError(context, error);
     }
@@ -355,6 +531,61 @@ class _ConnectorPicker extends StatelessWidget {
                     ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PreviewSheet extends StatelessWidget {
+  const _PreviewSheet({required this.job});
+
+  final CampusJob job;
+
+  @override
+  Widget build(BuildContext context) {
+    final rawItems = job.result['items'];
+    final items = rawItems is List
+        ? rawItems.whereType<Map>().toList(growable: false)
+        : const <Map>[];
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 680),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                context.strings.previewTitle,
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 12),
+              if (items.isEmpty)
+                Expanded(
+                  child: Center(child: Text(context.strings.noPreviewItems)),
+                )
+              else
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: items.length,
+                    separatorBuilder: (_, _) => const Divider(),
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(item['title']?.toString() ?? ''),
+                        subtitle: Text(
+                          item['content_text']?.toString() ?? '',
+                          maxLines: 4,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -576,6 +807,16 @@ String _formatDate(DateTime value) {
   String twoDigits(int part) => part.toString().padLeft(2, '0');
   return '${local.year}-${twoDigits(local.month)}-${twoDigits(local.day)} '
       '${twoDigits(local.hour)}:${twoDigits(local.minute)}';
+}
+
+String _jobSummary(CampusJob job) {
+  final result = job.result;
+  final parts = <String>[];
+  for (final key in ['items_seen', 'created', 'updated', 'unchanged']) {
+    if (result[key] != null) parts.add('$key=${result[key]}');
+  }
+  if (job.durationMs != null) parts.add('duration_ms=${job.durationMs}');
+  return parts.isEmpty ? job.kind : parts.join(' · ');
 }
 
 Uri? _safeExternalUrl(Object? value) {

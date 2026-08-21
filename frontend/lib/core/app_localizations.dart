@@ -105,6 +105,47 @@ class CampusStrings {
       _zh ? 'Connector 配置' : 'Connector configuration';
   String get createSource => _zh ? '创建来源' : 'Create source';
   String get sourceCreated => _zh ? '来源已创建' : 'Source created';
+  String get sourceSaved => _zh ? '来源已保存' : 'Source saved';
+  String get editSource => _zh ? '编辑来源' : 'Edit source';
+  String get sourceEnabled => _zh ? '启用来源' : 'Source enabled';
+  String get sourceEnabledHint => _zh
+      ? '停用后仍保留配置和历史消息。'
+      : 'Disabled sources keep their configuration and message history.';
+  String get collectionSchedule => _zh ? '采集计划' : 'Collection schedule';
+  String get scheduleMode => _zh ? '计划模式' : 'Schedule mode';
+  String get manualOnly => _zh ? '仅手动' : 'Manual only';
+  String get daily => _zh ? '每天' : 'Daily';
+  String get dailyTime => _zh ? '每日时间' : 'Daily time';
+  String get timezone => _zh ? '时区' : 'Timezone';
+  String get timezoneHint =>
+      _zh ? 'IANA 名称，例如 Asia/Shanghai' : 'IANA name, for example Asia/Shanghai';
+  String get showArchived => _zh ? '显示已归档' : 'Show archived';
+  String get archived => _zh ? '已归档' : 'Archived';
+  String get enabled => _zh ? '已启用' : 'Enabled';
+  String get disabled => _zh ? '已停用' : 'Disabled';
+  String get connectionCheck => _zh ? '检查连接' : 'Check connection';
+  String get connectionReady =>
+      _zh ? 'Connector 与配置均可用' : 'Connector and configuration are ready';
+  String get preview => _zh ? '预览' : 'Preview';
+  String get previewTitle => _zh ? '来源预览' : 'Source preview';
+  String get noPreviewItems => _zh ? '未返回预览消息' : 'No preview items returned';
+  String get archive => _zh ? '归档' : 'Archive';
+  String get restore => _zh ? '恢复' : 'Restore';
+  String get archiveSource => _zh ? '归档来源？' : 'Archive source?';
+  String get archiveSourceHint => _zh
+      ? '来源将被停用并隐藏，历史消息会保留。'
+      : 'The source will be disabled and hidden. Message history is preserved.';
+  String get sourceArchived => _zh ? '来源已归档' : 'Source archived';
+  String get sourceRestored =>
+      _zh ? '来源已恢复但仍处于停用状态' : 'Source restored in a disabled state';
+  String get nextRun => _zh ? '下次运行' : 'Next run';
+  String get jobDiagnostics => _zh ? '任务结果' : 'Job result';
+  String sourceSchedule(String mode, String time, String timezone) =>
+      mode == 'daily'
+      ? (_zh ? '每天 $time（$timezone）' : 'Daily at $time ($timezone)')
+      : manualOnly;
+  String nextRunAt(String value) => _zh ? '下次运行：$value' : 'Next run: $value';
+  String jobResult(String value) => _zh ? '任务结果：$value' : 'Job result: $value';
   String get sourceNotFound =>
       _zh ? '找不到所选 Connector' : 'Selected Connector not found';
   String get requiredName => _zh ? '请填写来源名称' : 'Enter a source name';

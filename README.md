@@ -17,7 +17,7 @@ The project is currently in **Phase 0: technical validation**. Source Connectors
 - Validates AI output against a structured schema before storing it.
 - Extracts summaries, relevance, importance, urgency, audiences, action items, and deadlines.
 - Provides an application inbox with offline caching and read-state preservation.
-- Lets Flutter clients discover Connectors, generate source forms from JSON Schema, complete generic authentication challenges, and follow manual sync jobs through Core.
+- Lets Flutter clients discover Connectors, generate source forms from JSON Schema, edit and archive sources, configure per-source schedules, preview collection, complete generic authentication challenges, and inspect jobs through Core.
 - Supports FCM and UnifiedPush-compatible notification transports behind a common interface.
 - Records architectural decisions, validation results, requirements, and development history in Markdown.
 
@@ -76,7 +76,7 @@ Core remains a modular monolith: API, worker, and scheduler processes share one 
 | `migrate` | One-shot Alembic migration; other backend services wait for it to succeed |
 | `api` | FastAPI health, message, job, Connector discovery, source, and authentication endpoints |
 | `worker` | Calls registered Connectors and runs AI analysis jobs |
-| `scheduler` | Daily collection job creation |
+| `scheduler` | Per-source due-time scanning and durable collection job creation |
 | `connector-static` | Independent generic HTTP/CSS-selector Connector |
 | `connector-browser` | Optional independent Playwright Connector with encrypted session state |
 
@@ -105,17 +105,17 @@ The Flutter application is installed directly on each client device and is not p
 
 | Area | Status |
 | --- | --- |
-| Python tests | 37 passing across SDK, Connectors, and Core; 73% aggregate coverage |
-| PostgreSQL migrations | Clean and populated revision `0002` databases upgraded through CampusItem revision `0003` |
+| Python tests | 43 passing across SDK, Connectors, and Core; 77% aggregate coverage |
+| PostgreSQL migrations | Clean and populated revision `0003` databases upgraded through source-lifecycle revision `0004` |
 | Compose startup | Passed from a clean PostgreSQL 18 volume |
 | Persistent job queue | Enqueue, consume, deduplicate, and container-recreation persistence passed |
 | Playwright Connector | Independent image built successfully; Chromium launched and rendered a page |
-| Flutter analysis and tests | Clean analysis, 9 tests passing, including dynamic source forms, auth challenges, and optional Chinese presentation strings |
+| Flutter analysis and tests | Clean analysis, 12 tests passing, including source editing, scheduling, archival recovery, dynamic forms, auth challenges, and optional Chinese presentation strings |
 | Linux client | Debug bundle built successfully |
 | Android client | Project generated; blocked locally on Android SDK and Firebase/device setup |
 | Windows client | Project generated; build validation awaits a Windows runner |
 | Connector architecture | Protocol, SDK, Core client, runtime registry, static/browser examples, auth challenge models, and conformance tests implemented |
-| Source onboarding | Flutter Connector discovery, Schema-driven configuration, source status, generic auth challenges, manual sync, and job polling implemented; isolated Compose flow passed |
+| Source onboarding | Full create/edit/enable/check/preview/archive/restore lifecycle, source-level manual/daily scheduling, generic auth, manual sync, and structured job diagnostics implemented; isolated Compose flow passed |
 | Authenticated portal | Connector-owned encrypted-session tests passed; a real user-assisted source flow is pending |
 | Cloud AI | Mock contract passed; real provider and labeled sample evaluation pending |
 | Push delivery | Adapters and probes implemented; real FCM/UnifiedPush delivery pending |
@@ -228,7 +228,7 @@ compose.yaml             Single-host service orchestration
 | Phase | Main deliverables | Exit criteria |
 | --- | --- | --- |
 | **0 — Feasibility validation** (current) | Establish the independent Connector contract/SDK, then validate one authenticated portal, one sustainable public-channel source, cloud AI quality, Android push delivery, and all client build targets | Connector conformance passes; no blocking source or notification issue; generic results and decisions are recorded |
-| **1 — Collection loop** | Source configuration, scheduled and manual collection, normalization, deduplication, job diagnostics, and the first production Connectors | Seven consecutive days of traceable collection on the target Debian server |
+| **1 — Collection loop** (implementation started) | Source lifecycle, scheduled and manual collection, normalization, deduplication, job diagnostics, and the first production Connectors | Seven consecutive days of traceable collection on the target Debian server |
 | **2 — AI and notifications** | Deterministic rules, structured cloud AI analysis, importance policy, deadlines, immediate alerts, and daily digests | Labeled evaluation set passes and trial use shows no material duplicate alerts or fabricated deadlines |
 | **3 — Cross-platform MVP** | Complete inbox, search, filters, source management, settings, offline changes, synchronization, and Windows/Linux/Android packages | Core acceptance scenarios pass on all three platforms |
 | **4 — Reliability and experience** | Backup/restore drills, monitoring, production authentication, TLS, accessibility, performance work, and parser regression fixtures | Production checklist passes and recovery is demonstrated from a clean environment |

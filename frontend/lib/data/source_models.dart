@@ -1,5 +1,34 @@
 typedef JsonMap = Map<String, Object?>;
 
+/// A user-facing collection schedule that remains independent of Flutter UI types.
+class SourceScheduleData {
+  const SourceScheduleData({
+    required this.mode,
+    required this.time,
+    required this.timezone,
+  });
+
+  static const dailyDefault = SourceScheduleData(
+    mode: 'daily',
+    time: '07:00',
+    timezone: 'Asia/Shanghai',
+  );
+
+  final String mode;
+  final String time;
+  final String timezone;
+
+  bool get isDaily => mode == 'daily';
+
+  JsonMap toJson() => {'mode': mode, 'time': time, 'timezone': timezone};
+
+  factory SourceScheduleData.fromJson(JsonMap json) => SourceScheduleData(
+    mode: json['mode'] as String? ?? 'manual',
+    time: _shortTime(json['time'] as String? ?? '07:00'),
+    timezone: json['timezone'] as String? ?? 'Asia/Shanghai',
+  );
+}
+
 /// A Connector advertised by Core together with its current availability.
 class ConnectorRegistration {
   const ConnectorRegistration({
@@ -73,12 +102,15 @@ class SourceInstance {
     required this.connectorId,
     required this.enabled,
     required this.config,
+    required this.schedule,
     required this.authStatus,
     required this.createdAt,
     required this.updatedAt,
     this.connectorVersion,
     this.lastSuccessAt,
     this.lastError,
+    this.nextRunAt,
+    this.archivedAt,
   });
 
   final String id;
@@ -87,11 +119,16 @@ class SourceInstance {
   final String? connectorVersion;
   final bool enabled;
   final JsonMap config;
+  final SourceScheduleData schedule;
   final String authStatus;
   final DateTime? lastSuccessAt;
   final String? lastError;
+  final DateTime? nextRunAt;
+  final DateTime? archivedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  bool get isArchived => archivedAt != null;
 
   SourceInstance copyWith({String? authStatus}) => SourceInstance(
     id: id,
@@ -100,9 +137,12 @@ class SourceInstance {
     connectorVersion: connectorVersion,
     enabled: enabled,
     config: config,
+    schedule: schedule,
     authStatus: authStatus ?? this.authStatus,
     lastSuccessAt: lastSuccessAt,
     lastError: lastError,
+    nextRunAt: nextRunAt,
+    archivedAt: archivedAt,
     createdAt: createdAt,
     updatedAt: updatedAt,
   );
@@ -114,11 +154,38 @@ class SourceInstance {
     connectorVersion: json['connector_version'] as String?,
     enabled: json['enabled']! as bool,
     config: _stringMap(json['config']! as Map),
+    schedule: json['schedule'] is Map
+        ? SourceScheduleData.fromJson(_stringMap(json['schedule']! as Map))
+        : SourceScheduleData.dailyDefault,
     authStatus: json['auth_status']! as String,
     lastSuccessAt: _date(json['last_success_at']),
     lastError: json['last_error'] as String?,
+    nextRunAt: _date(json['next_run_at']),
+    archivedAt: _date(json['archived_at']),
     createdAt: _date(json['created_at'])!,
     updatedAt: _date(json['updated_at'])!,
+  );
+}
+
+/// A non-collecting source health check returned by Core.
+class SourceCheckData {
+  const SourceCheckData({
+    required this.connectorStatus,
+    required this.configStatus,
+    required this.authStatus,
+    required this.checkedAt,
+  });
+
+  final String connectorStatus;
+  final String configStatus;
+  final String authStatus;
+  final DateTime checkedAt;
+
+  factory SourceCheckData.fromJson(JsonMap json) => SourceCheckData(
+    connectorStatus: json['connector_status']! as String,
+    configStatus: json['config_status']! as String,
+    authStatus: json['auth_status']! as String,
+    checkedAt: _date(json['checked_at'])!,
   );
 }
 
@@ -212,6 +279,11 @@ class CampusJob {
     required this.status,
     required this.attempts,
     required this.maxAttempts,
+    this.kind = '',
+    this.result = const {},
+    this.startedAt,
+    this.finishedAt,
+    this.durationMs,
     this.lastError,
   });
 
@@ -219,6 +291,11 @@ class CampusJob {
   final String status;
   final int attempts;
   final int maxAttempts;
+  final String kind;
+  final JsonMap result;
+  final DateTime? startedAt;
+  final DateTime? finishedAt;
+  final int? durationMs;
   final String? lastError;
 
   bool get isTerminal =>
@@ -229,6 +306,13 @@ class CampusJob {
     status: json['status']! as String,
     attempts: json['attempts']! as int,
     maxAttempts: json['max_attempts']! as int,
+    kind: json['kind'] as String? ?? '',
+    result: json['result'] is Map
+        ? _stringMap(json['result']! as Map)
+        : const {},
+    startedAt: _date(json['started_at']),
+    finishedAt: _date(json['finished_at']),
+    durationMs: json['duration_ms'] as int?,
     lastError: json['last_error'] as String?,
   );
 }
@@ -240,3 +324,6 @@ DateTime? _date(Object? value) {
   if (value is! String || value.isEmpty) return null;
   return DateTime.tryParse(value)?.toLocal();
 }
+
+String _shortTime(String value) =>
+    value.length >= 5 ? value.substring(0, 5) : value;

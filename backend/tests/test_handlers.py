@@ -2,23 +2,23 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from campus_connector_sdk import ConnectorMessage, SyncBatch
+from campus_connector_sdk import CampusItem, CampusItemBatch
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from campus_ai.handlers import handle_fetch_all, handle_sync_source
+from campus_ai.handlers import _persist_message, handle_fetch_all, handle_sync_source
 from campus_ai.models import Job, Message, Source
 
 
 class FakeConnectorClient:
-    def sync(self, request) -> SyncBatch:
-        return SyncBatch(
+    def sync(self, request) -> CampusItemBatch:
+        return CampusItemBatch(
             items=[
-                ConnectorMessage(
+                CampusItem(
                     external_id="notice-1",
-                    url="https://campus.example/notice/1",
+                    source_url="https://campus.example/notice/1",
                     title="考试安排",
-                    body="考试时间为2026年9月1日。",
+                    content_text="考试时间为2026年9月1日。",
                     published_at=datetime.fromisoformat("2026-08-19T08:00:00+08:00"),
                 )
             ],
@@ -60,3 +60,23 @@ def test_fetch_source_is_incremental_and_enqueues_analysis(session: Session, mon
     analysis_jobs = session.scalars(select(Job).where(Job.kind == "analyze_message")).all()
     assert len(analysis_jobs) == 1
     assert source.sync_cursor == {"last": "notice-1"}
+
+
+def test_distinct_external_ids_are_not_deduplicated_by_content(session: Session) -> None:
+    source = Source(name="public", connector_id="example.static", enabled=True, config={})
+    session.add(source)
+    session.commit()
+
+    for external_id in ("notice-1", "notice-2"):
+        _persist_message(
+            session,
+            source,
+            CampusItem(
+                external_id=external_id,
+                source_url=f"https://campus.example/{external_id}",
+                title="Shared title",
+                content_text="Shared body",
+            ),
+        )
+
+    assert session.scalar(select(func.count()).select_from(Message)) == 2

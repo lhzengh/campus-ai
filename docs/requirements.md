@@ -1,7 +1,7 @@
 # Campus AI 需求规格说明书
 
 > 文档状态：基础范围已确认
-> 版本：0.2.0
+> 版本：0.2.1
 > 创建日期：2026-08-19
 > 适用阶段：需求确认与 MVP 规划
 
@@ -173,7 +173,7 @@ flowchart LR
 | FR-115 | Must | Connector 的普通输入由其配置 Schema 定义；Client 可据此生成配置表单，Core 只执行通用校验、权限控制和持久化。 |
 | FR-116 | Must | Connector 配置 Schema 必须能标识 Secret 字段；Core 只保存加密值或 Secret 引用，一次性验证码使用后不得持久化。 |
 | FR-117 | Must | Connector 认证流程使用统一状态和挑战模型，至少能表达无需认证、需要认证、等待用户输入、就绪和失效，以及密码、短信、扫码、验证码和浏览器交互等挑战。 |
-| FR-118 | Must | Connector 同步结果使用统一消息与批次结构，至少包含外部 ID、标题、正文、原文 URL、发布时间、附件、元数据、下一游标和是否仍有更多数据。 |
+| FR-118 | Must | Connector 同步结果必须使用版本化 `CampusItemBatch` / `CampusItem` 契约；稳定字段、游标提交语义、附件访问方式、扩展命名空间和禁止传输的敏感数据遵循 `docs/connectors/campus-item-contract.md`。 |
 | FR-119 | Must | Connector 使用统一错误码表达配置无效、需要认证、访问拒绝、限流、来源变化和临时故障；Core 据此决定暂停、退避、重试或通知用户。 |
 | FR-120 | Must | Connector SDK 应提供服务包装器和兼容性测试，使开发者只需实现 Manifest、配置校验、认证和同步逻辑。 |
 | FR-121 | Must | Core 必须校验 Connector ID、版本和协议兼容性，拒绝将注册 ID 与 Manifest 不匹配的服务用于同步。 |
@@ -195,6 +195,19 @@ flowchart LR
 | FR-209 | Must | 解析失败时应保留原始响应的受控快照或足够的诊断信息，且不得在普通日志中暴露凭据。 |
 | FR-210 | Should | 用户可配置合理的历史回溯窗口与每次采集上限。 |
 | FR-211 | Must | 采集器应遵守适用法律、网站条款、访问权限和合理请求频率。 |
+
+#### 6.3.1 Core 标准输入边界
+
+Connector 只输出从来源中取得并规范化的事实，不输出数据库 ID、抓取时间、内容指纹、AI 结论或通知状态。Core 接收的标准单位是 `CampusItem`，传输单位是 `CampusItemBatch`：
+
+- `CampusItem` 必须具有来源实例内稳定的 `external_id`、信息类型、原文 URL、原始标题和纯文本正文；可携带明确的发布者、发布时间、更新时间、富文本和附件引用。
+- 学校或 Connector 特有数据只能进入以 Connector ID 为键的 `extensions` 命名空间，Core 业务逻辑不得依赖其中字段。
+- 密码、验证码、Cookie、浏览器状态、访问令牌和带凭据 URL 不得出现在 Item、附件、扩展、警告或游标中。
+- Core 使用 `(source_id, external_id)` 保证幂等；同一 ID 内容改变时视为更新，仅在标准内容指纹改变后重新分析。
+- `next_cursor` 对 Core 完全不透明，只能在本批数据成功持久化后保存并于下一次同步原样传回。
+- 登录受限附件使用 Connector 自有的不透明引用，不得把来源会话交给 Core。
+
+完整 JSON 结构、字段约束、附件模式和更新规则见 [CampusItem Contract v1](connectors/campus-item-contract.md)。该文档与 Connector OpenAPI 共同构成协议规范。
 
 ### 6.4 AI 与规则分析
 
@@ -602,6 +615,7 @@ docs/
 | 0.1.3 | 2026-08-21 | 确认首个部署实例采用交互验证码门户和固定 IP Debian 服务器；具体来源参数属于私有配置 | 基础范围已确认 |
 | 0.1.4 | 2026-08-21 | 明确项目为通用 Campus AI；禁止硬编码学校、网址、账号与密码，来源和部署参数全部外置 | 基础范围已确认 |
 | 0.2.0 | 2026-08-21 | 确认 Monorepo 下 Client、Core、Connector SDK 与 Connector 的可拆分边界；新增独立协议、Manifest、配置 Schema、认证挑战、统一输出和兼容性测试要求 | 基础范围已确认 |
+| 0.2.1 | 2026-08-21 | 定义 Core 标准输入为 `CampusItemBatch v1`；明确事实边界、稳定 ID、扩展命名空间、附件访问、游标提交、去重更新和敏感数据禁区 | 基础范围已确认 |
 
 ## 附录 A：技术参考
 

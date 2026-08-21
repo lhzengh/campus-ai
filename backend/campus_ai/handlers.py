@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import date
 from typing import Any
 
-from campus_connector_sdk import AuthState, ConnectorMessage, SyncRequest
+from campus_connector_sdk import AuthState, CampusItem, SyncRequest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -20,53 +20,64 @@ from campus_ai.models import Analysis, Message, Source, utcnow
 JobHandler = Callable[[Session, dict[str, Any]], None]
 
 
-def _content_hash(title: str, body: str) -> str:
-    normalized = "\n".join((title.strip(), body.strip()))
+def _content_hash(item: CampusItem) -> str:
+    """Fingerprint only standard facts that can affect analysis."""
+
+    content = {
+        "item_type": item.item_type.value,
+        "title": item.title.strip(),
+        "content_text": item.content_text.strip(),
+        "content_html": item.content_html,
+        "publisher": item.publisher.model_dump(mode="json") if item.publisher else None,
+        "published_at": item.published_at.isoformat() if item.published_at else None,
+        "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+        "attachments": [attachment.model_dump(mode="json") for attachment in item.attachments],
+    }
+    normalized = json.dumps(content, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
-def _persist_message(session: Session, source: Source, normalized: ConnectorMessage) -> Message | None:
-    """Persist one canonical message without exposing database models to Connectors."""
+def _apply_item(message: Message, item: CampusItem) -> None:
+    """Map a protocol fact to Core-owned persistence fields."""
 
-    content_hash = _content_hash(normalized.title, normalized.body)
+    message.item_type = item.item_type.value
+    message.source_url = item.source_url
+    message.title = item.title
+    message.content_text = item.content_text
+    message.content_html = item.content_html
+    message.publisher_json = item.publisher.model_dump(mode="json") if item.publisher else None
+    message.published_at = item.published_at
+    message.source_updated_at = item.updated_at
+    message.fetched_at = utcnow()
+    message.attachments_json = [attachment.model_dump(mode="json") for attachment in item.attachments]
+    message.extensions_json = item.extensions
+
+
+def _persist_message(session: Session, source: Source, item: CampusItem) -> Message | None:
+    """Persist one canonical Item without exposing database models to Connectors."""
+
+    content_hash = _content_hash(item)
     existing = session.scalar(
         select(Message).where(
             Message.source_id == source.id,
-            Message.external_id == normalized.external_id,
+            Message.external_id == item.external_id,
         )
     )
     if existing is not None and existing.content_hash == content_hash:
+        # Non-analysis fields may still change without changing the source facts.
+        _apply_item(existing, item)
         return None
     if existing is None:
-        duplicate = session.scalar(
-            select(Message).where(Message.source_id == source.id, Message.content_hash == content_hash)
-        )
-        if duplicate is not None:
-            return None
         message = Message(
             source_id=source.id,
-            external_id=normalized.external_id,
-            url=normalized.url,
-            title=normalized.title,
-            body=normalized.body,
-            published_at=normalized.published_at,
+            external_id=item.external_id,
             content_hash=content_hash,
-            metadata_json={
-                **normalized.metadata,
-                "attachments": [attachment.model_dump(mode="json") for attachment in normalized.attachments],
-            },
         )
+        _apply_item(message, item)
         session.add(message)
     else:
-        existing.url = normalized.url
-        existing.title = normalized.title
-        existing.body = normalized.body
-        existing.published_at = normalized.published_at
         existing.content_hash = content_hash
-        existing.metadata_json = {
-            **normalized.metadata,
-            "attachments": [attachment.model_dump(mode="json") for attachment in normalized.attachments],
-        }
+        _apply_item(existing, item)
         message = existing
     session.commit()
     session.refresh(message)
@@ -175,7 +186,11 @@ def handle_analyze_message(session: Session, payload: dict[str, Any]) -> None:
         model=settings.model,
         output_mode=settings.ai_output_mode,
     )
-    response = provider.analyze(title=message.title, body=message.body, profile=payload.get("profile", {}))
+    response = provider.analyze(
+        title=message.title,
+        body=message.content_text,
+        profile=payload.get("profile", {}),
+    )
     analysis = Analysis(
         message_id=message.id,
         provider="openai-compatible",

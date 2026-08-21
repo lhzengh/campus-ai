@@ -5,10 +5,10 @@ from fastapi import HTTPException
 
 from campus_connector_sdk import (
     CampusConnector,
+    CampusItem,
+    CampusItemBatch,
     ConnectorCapability,
     ConnectorManifest,
-    ConnectorMessage,
-    SyncBatch,
     SyncRequest,
     create_connector_app,
 )
@@ -28,9 +28,16 @@ class ExampleConnector(CampusConnector):
     def validate_config(self, config: dict[str, object]) -> dict[str, object]:
         return dict(config)
 
-    def sync(self, request: SyncRequest) -> SyncBatch:
-        return SyncBatch(
-            items=[ConnectorMessage(external_id="one", url="https://campus.example/1", title="One", body="Body")],
+    def sync(self, request: SyncRequest) -> CampusItemBatch:
+        return CampusItemBatch(
+            items=[
+                CampusItem(
+                    external_id="one",
+                    source_url="https://campus.example/1",
+                    title="One",
+                    content_text="Body",
+                )
+            ],
             next_cursor={"last": "one"},
         )
 

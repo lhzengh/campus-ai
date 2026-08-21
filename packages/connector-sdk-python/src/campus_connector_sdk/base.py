@@ -6,9 +6,9 @@ from campus_connector_sdk.errors import ConnectorProtocolError
 from campus_connector_sdk.models import (
     AuthResult,
     AuthState,
+    CampusItemBatch,
     ConnectorErrorCode,
     ConnectorManifest,
-    SyncBatch,
     SyncRequest,
 )
 
@@ -47,5 +47,5 @@ class CampusConnector(ABC):
         )
 
     @abstractmethod
-    def sync(self, request: SyncRequest) -> SyncBatch:
+    def sync(self, request: SyncRequest) -> CampusItemBatch:
         """Return a normalized, cursor-aware batch without accessing Core storage."""

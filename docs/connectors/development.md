@@ -7,7 +7,7 @@ Campus AI Connectors are independent services. A Connector may live in this Mono
 A Python Connector subclasses `CampusConnector` and implements:
 
 ```python
-from campus_connector_sdk import CampusConnector, ConnectorManifest, SyncBatch, SyncRequest
+from campus_connector_sdk import CampusConnector, CampusItemBatch, ConnectorManifest, SyncRequest
 
 
 class MyConnector(CampusConnector):
@@ -18,7 +18,7 @@ class MyConnector(CampusConnector):
     def validate_config(self, config: dict[str, object]) -> dict[str, object]:
         ...
 
-    def sync(self, request: SyncRequest) -> SyncBatch:
+    def sync(self, request: SyncRequest) -> CampusItemBatch:
         ...
 ```
 
@@ -32,7 +32,7 @@ Configuration keys marked with `x-campus-secret: true` are never accepted by Cor
 
 ## Standard output
 
-`SyncBatch` contains normalized `ConnectorMessage` records, an opaque next cursor, a `has_more` flag, authentication state, and non-fatal warnings. Core owns database IDs, deduplication, AI analysis, notifications, and retry policy. A Connector must not write to Core storage.
+`CampusItemBatch` contains normalized `CampusItem` facts, an opaque next cursor, a `has_more` flag, authentication state, and structured non-fatal warnings. Core owns database IDs, observation timestamps, deduplication, AI analysis, notifications, and retry policy. A Connector must not write to Core storage. The complete required shape and invariants are defined in [CampusItem Contract v1](campus-item-contract.md).
 
 ## Local validation
 

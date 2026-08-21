@@ -44,20 +44,24 @@ class Message(Base):
     __tablename__ = "messages"
     __table_args__ = (
         UniqueConstraint("source_id", "external_id", name="uq_message_source_external"),
-        UniqueConstraint("source_id", "content_hash", name="uq_message_source_hash"),
         Index("ix_messages_published_at", "published_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     source_id: Mapped[str] = mapped_column(ForeignKey("sources.id", ondelete="CASCADE"))
     external_id: Mapped[str] = mapped_column(String(500))
-    url: Mapped[str] = mapped_column(Text)
+    item_type: Mapped[str] = mapped_column(String(30), default="announcement")
+    source_url: Mapped[str] = mapped_column(Text)
     title: Mapped[str] = mapped_column(Text)
-    body: Mapped[str] = mapped_column(Text)
+    content_text: Mapped[str] = mapped_column(Text)
+    content_html: Mapped[str | None] = mapped_column(Text, nullable=True)
+    publisher_json: Mapped[dict[str, Any] | None] = mapped_column("publisher", JSON, nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_updated_at: Mapped[datetime | None] = mapped_column("updated_at", DateTime(timezone=True), nullable=True)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     content_hash: Mapped[str] = mapped_column(String(64))
-    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+    attachments_json: Mapped[list[dict[str, Any]]] = mapped_column("attachments", JSON, default=list)
+    extensions_json: Mapped[dict[str, Any]] = mapped_column("extensions", JSON, default=dict)
 
     source: Mapped[Source] = relationship()
 

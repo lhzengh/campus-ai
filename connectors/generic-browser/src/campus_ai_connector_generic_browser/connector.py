@@ -17,12 +17,12 @@ from campus_connector_sdk import (
     AuthResult,
     AuthState,
     CampusConnector,
+    CampusItem,
+    CampusItemBatch,
     ConnectorCapability,
     ConnectorErrorCode,
     ConnectorManifest,
-    ConnectorMessage,
     ConnectorProtocolError,
-    SyncBatch,
     SyncRequest,
 )
 from campus_ai_connector_generic_browser.session import EncryptedBrowserSession
@@ -185,7 +185,7 @@ class GenericBrowserConnector(CampusConnector):
         self._challenges.pop(instance_id, None)
         return AuthResult(state=AuthState.READY)
 
-    def sync(self, request: SyncRequest) -> SyncBatch:
+    def sync(self, request: SyncRequest) -> CampusItemBatch:
         config = self.validate_config(request.config)
         url = str(config["page_url"])
         raw = self._session().open_authenticated_page(
@@ -221,20 +221,22 @@ class GenericBrowserConnector(CampusConnector):
                 if published_at.tzinfo is None:
                     published_at = published_at.replace(tzinfo=ZoneInfo(str(config["timezone_name"])))
 
-        message = ConnectorMessage(
+        message = CampusItem(
             external_id=hashlib.sha256(url.encode("utf-8")).hexdigest(),
-            url=url,
+            source_url=url,
             title=title_node.text(separator=" ", strip=True),
-            body=body_node.text(separator="\n", strip=True),
+            content_text=body_node.text(separator="\n", strip=True),
             published_at=published_at,
         )
         # A changed hash re-emits the stable external ID so Core records an update.
-        content_hash = hashlib.sha256(f"{message.title.strip()}\n{message.body.strip()}".encode("utf-8")).hexdigest()
+        content_hash = hashlib.sha256(
+            f"{message.title.strip()}\n{message.content_text.strip()}".encode("utf-8")
+        ).hexdigest()
         if request.cursor.get("content_hash") == content_hash:
-            items: list[ConnectorMessage] = []
+            items: list[CampusItem] = []
         else:
             items = [message]
-        return SyncBatch(
+        return CampusItemBatch(
             items=items,
             next_cursor={"content_hash": content_hash},
             auth_state=AuthState.READY,

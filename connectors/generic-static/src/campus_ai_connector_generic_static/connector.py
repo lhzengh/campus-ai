@@ -12,12 +12,12 @@ from selectolax.parser import HTMLParser
 
 from campus_connector_sdk import (
     CampusConnector,
+    CampusItem,
+    CampusItemBatch,
     ConnectorCapability,
     ConnectorErrorCode,
     ConnectorManifest,
-    ConnectorMessage,
     ConnectorProtocolError,
-    SyncBatch,
     SyncRequest,
 )
 
@@ -198,7 +198,7 @@ class GenericStaticConnector(CampusConnector):
                 retryable=True,
             ) from exc
 
-    def _normalize(self, url: str, raw: str, config: dict[str, object]) -> ConnectorMessage:
+    def _normalize(self, url: str, raw: str, config: dict[str, object]) -> CampusItem:
         tree = HTMLParser(raw)
         title_node = tree.css_first(str(config["title_selector"]))
         body_node = tree.css_first(str(config["body_selector"]))
@@ -230,15 +230,15 @@ class GenericStaticConnector(CampusConnector):
                     published_at = published_at.replace(tzinfo=ZoneInfo(str(config["timezone_name"])))
 
         external_id = hashlib.sha256(url.encode("utf-8")).hexdigest()
-        return ConnectorMessage(
+        return CampusItem(
             external_id=external_id,
-            url=url,
+            source_url=url,
             title=title_node.text(separator=" ", strip=True),
-            body=body_node.text(separator="\n", strip=True),
+            content_text=body_node.text(separator="\n", strip=True),
             published_at=published_at,
         )
 
-    def sync(self, request: SyncRequest) -> SyncBatch:
+    def sync(self, request: SyncRequest) -> CampusItemBatch:
         config = self.validate_config(request.config)
         index_url = str(config["index_url"])
         allowed_hosts = set(config["allowed_hosts"])
@@ -261,14 +261,14 @@ class GenericStaticConnector(CampusConnector):
         if not isinstance(previous_hashes, dict):
             previous_hashes = {}
         next_hashes = {str(key): str(value) for key, value in previous_hashes.items()}
-        items: list[ConnectorMessage] = []
+        items: list[CampusItem] = []
         remaining = False
 
         for url, external_id in discovered.items():
             raw = self._get(url, allowed_hosts=allowed_hosts, interval=interval).text
             message = self._normalize(url, raw, config)
             content_hash = hashlib.sha256(
-                f"{message.title.strip()}\n{message.body.strip()}".encode("utf-8")
+                f"{message.title.strip()}\n{message.content_text.strip()}".encode("utf-8")
             ).hexdigest()
             if next_hashes.get(external_id) == content_hash:
                 continue
@@ -281,4 +281,4 @@ class GenericStaticConnector(CampusConnector):
         # Bound cursor growth for long-lived sources.
         if len(next_hashes) > 2000:
             next_hashes = dict(list(next_hashes.items())[-2000:])
-        return SyncBatch(items=items, next_cursor={"content_hashes": next_hashes}, has_more=remaining)
+        return CampusItemBatch(items=items, next_cursor={"content_hashes": next_hashes}, has_more=remaining)

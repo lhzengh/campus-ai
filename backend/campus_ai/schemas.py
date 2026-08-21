@@ -57,12 +57,17 @@ class MessageView(BaseModel):
     id: str
     source_id: str
     external_id: str
-    url: str
+    item_type: str
+    source_url: str
     title: str
-    body: str
+    content_text: str
+    content_html: str | None
+    publisher_json: dict[str, Any] | None
     published_at: datetime | None
+    source_updated_at: datetime | None
     fetched_at: datetime
-    metadata_json: dict[str, Any]
+    attachments_json: list[dict[str, Any]]
+    extensions_json: dict[str, Any]
 
 
 class SourceCreate(BaseModel):

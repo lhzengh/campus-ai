@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
+import re
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 CONTRACT_VERSION = "1.0"
@@ -45,6 +48,19 @@ class ConnectorErrorCode(StrEnum):
     TEMPORARY_FAILURE = "temporary_failure"
     UNSUPPORTED_OPERATION = "unsupported_operation"
     PROTOCOL_MISMATCH = "protocol_mismatch"
+
+
+class CampusItemType(StrEnum):
+    ANNOUNCEMENT = "announcement"
+    NEWS = "news"
+    EVENT = "event"
+    RESOURCE = "resource"
+    OTHER = "other"
+
+
+class AttachmentAccessMode(StrEnum):
+    PUBLIC_URL = "public_url"
+    CONNECTOR_FETCH = "connector_fetch"
 
 
 class ConnectorManifest(BaseModel):
@@ -117,25 +133,111 @@ class SubmitAuthRequest(AuthStatusRequest):
     response: dict[str, str] = Field(default_factory=dict)
 
 
-class ConnectorAttachment(BaseModel):
-    external_id: str | None = None
-    name: str
-    url: str
-    media_type: str | None = None
-    content_hash: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+def _absolute_http_url(value: str, *, field_name: str) -> str:
+    """Validate transport URLs without normalizing source-owned identifiers."""
+
+    parsed = urlsplit(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError(f"{field_name} must be an absolute HTTP(S) URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError(f"{field_name} must not contain credentials")
+    return value
 
 
-class ConnectorMessage(BaseModel):
-    """Canonical source message; Core owns persistence and downstream analysis."""
+def _bounded_json(value: dict[str, Any], *, field_name: str, max_bytes: int = 65_536) -> dict[str, Any]:
+    """Keep opaque protocol state bounded and JSON serializable."""
+
+    try:
+        encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must contain JSON-compatible values") from exc
+    if len(encoded) > max_bytes:
+        raise ValueError(f"{field_name} must not exceed {max_bytes} UTF-8 bytes")
+    return value
+
+
+class CampusPublisher(BaseModel):
+    """Publisher explicitly named by the source, never inferred by Connector code."""
+
+    name: str = Field(min_length=1, max_length=500)
+    external_id: str | None = Field(default=None, max_length=500)
+
+
+class AttachmentAccess(BaseModel):
+    """Either a public URL or an opaque reference resolved by the Connector."""
+
+    mode: AttachmentAccessMode
+    url: str | None = None
+    ref: str | None = Field(default=None, max_length=2_000)
+
+    @model_validator(mode="after")
+    def validate_mode_fields(self) -> AttachmentAccess:
+        if self.mode is AttachmentAccessMode.PUBLIC_URL:
+            if not self.url or self.ref is not None:
+                raise ValueError("public_url access requires url and forbids ref")
+            self.url = _absolute_http_url(self.url, field_name="attachment access URL")
+        elif not self.ref or self.url is not None:
+            raise ValueError("connector_fetch access requires ref and forbids url")
+        return self
+
+
+class CampusAttachment(BaseModel):
+    external_id: str | None = Field(default=None, max_length=500)
+    name: str = Field(min_length=1, max_length=1_000)
+    media_type: str | None = Field(default=None, max_length=255)
+    size_bytes: int | None = Field(default=None, ge=0)
+    content_hash: str | None = Field(default=None, max_length=200)
+    access: AttachmentAccess
+
+
+class CampusItem(BaseModel):
+    """Canonical source fact; Core owns persistence, analysis, and notification."""
 
     external_id: str = Field(min_length=1, max_length=500)
-    url: str
-    title: str = Field(min_length=1)
-    body: str
+    item_type: CampusItemType = CampusItemType.ANNOUNCEMENT
+    source_url: str
+    title: str = Field(min_length=1, max_length=2_000)
+    content_text: str = Field(max_length=1_000_000)
+    content_html: str | None = Field(default=None, max_length=2_000_000)
+    publisher: CampusPublisher | None = None
     published_at: datetime | None = None
-    attachments: list[ConnectorAttachment] = Field(default_factory=list)
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    updated_at: datetime | None = None
+    attachments: list[CampusAttachment] = Field(default_factory=list, max_length=100)
+    extensions: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("source_url")
+    @classmethod
+    def validate_source_url(cls, value: str) -> str:
+        return _absolute_http_url(value, field_name="source_url")
+
+    @field_validator("published_at", "updated_at")
+    @classmethod
+    def require_timestamp_offset(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.utcoffset() is None:
+            raise ValueError("source timestamps must include an explicit UTC offset")
+        return value
+
+    @field_validator("extensions")
+    @classmethod
+    def validate_extensions(cls, value: dict[str, Any]) -> dict[str, Any]:
+        connector_id = re.compile(r"^[a-z0-9]+(?:[._-][a-z0-9]+)+$")
+        if any(connector_id.fullmatch(key) is None for key in value):
+            raise ValueError("extensions keys must be stable Connector IDs")
+        return _bounded_json(value, field_name="extensions")
+
+
+class SyncWarning(BaseModel):
+    """Structured non-fatal problem that does not invalidate the whole batch."""
+
+    code: str = Field(pattern=r"^[a-z0-9]+(?:[._-][a-z0-9]+)*$")
+    message: str = Field(min_length=1, max_length=2_000)
+    external_id: str | None = Field(default=None, max_length=500)
+    details: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("details")
+    @classmethod
+    def validate_details(cls, value: dict[str, Any]) -> dict[str, Any]:
+        return _bounded_json(value, field_name="warning details")
 
 
 class SyncRequest(BaseModel):
@@ -147,14 +249,32 @@ class SyncRequest(BaseModel):
     max_items: int = Field(default=100, ge=1, le=1000)
 
 
-class SyncBatch(BaseModel):
+class CampusItemBatch(BaseModel):
     """One bounded incremental result returned across the process boundary."""
 
-    items: list[ConnectorMessage] = Field(default_factory=list)
+    contract_version: Literal["1.0"] = CONTRACT_VERSION
+    items: list[CampusItem] = Field(default_factory=list, max_length=1_000)
     next_cursor: dict[str, Any] = Field(default_factory=dict)
     has_more: bool = False
     auth_state: AuthState = AuthState.NOT_REQUIRED
-    warnings: list[str] = Field(default_factory=list)
+    warnings: list[SyncWarning] = Field(default_factory=list, max_length=100)
+
+    @field_validator("next_cursor")
+    @classmethod
+    def validate_cursor(cls, value: dict[str, Any]) -> dict[str, Any]:
+        return _bounded_json(value, field_name="next_cursor")
+
+    @model_validator(mode="after")
+    def require_pagination_cursor(self) -> CampusItemBatch:
+        if self.has_more and not self.next_cursor:
+            raise ValueError("has_more requires a non-empty next_cursor")
+        return self
+
+
+# Temporary symbol aliases aid migration; legacy serialized field names stay invalid.
+ConnectorAttachment = CampusAttachment
+ConnectorMessage = CampusItem
+SyncBatch = CampusItemBatch
 
 
 class ConnectorErrorBody(BaseModel):

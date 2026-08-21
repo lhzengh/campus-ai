@@ -11,12 +11,12 @@ from campus_connector_sdk.models import (
     AuthResult,
     AuthStatusRequest,
     BeginAuthRequest,
+    CampusItemBatch,
     ConfigValidationRequest,
     ConfigValidationResult,
     ConnectorErrorBody,
     ConnectorManifest,
     SubmitAuthRequest,
-    SyncBatch,
     SyncRequest,
 )
 
@@ -88,8 +88,8 @@ def create_connector_app(connector: CampusConnector, *, shared_token: str = "") 
             payload.response,
         )
 
-    @app.post("/v1/sync", response_model=SyncBatch, dependencies=protected)
-    def sync(payload: SyncRequest) -> SyncBatch:
+    @app.post("/v1/sync", response_model=CampusItemBatch, dependencies=protected)
+    def sync(payload: SyncRequest) -> CampusItemBatch:
         return connector.sync(payload)
 
     return app

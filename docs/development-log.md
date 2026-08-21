@@ -2,6 +2,19 @@
 
 本文件记录项目的重要工作、验证结果与遗留事项。需求变化记录在 `requirements.md`，架构选择后续单独记录在 `adr/`。
 
+## 2026-08-21：定义 Core 标准输入格式
+
+- Core 标准输入确定为版本化 `CampusItemBatch` / `CampusItem`，不直接接收学校页面结构或数据库模型。
+- Connector 只输出稳定外部 ID、原始标题和正文、原文地址、明确的发布者/时间、附件事实与命名空间扩展；Core 生成数据库 ID、抓取时间、内容指纹、AI 结果和通知状态。
+- `(source_id, external_id)` 是幂等键；游标仅在整批持久化成功后提交，同 ID 内容改变才重新分析。
+- 登录受限附件使用 `connector_fetch` 不透明引用，来源会话仍由 Connector 持有。
+- 密码、验证码、Cookie、浏览器状态、令牌和带凭据 URL 禁止进入 Item、附件、扩展、警告或游标。
+- 完整规范记录在 `docs/connectors/campus-item-contract.md`；实现工作位于 `feature/campus-item-contract`。
+- SDK、OpenAPI、两个示例 Connector、Core HTTP 客户端、数据库映射和 Client API 已统一使用新字段；旧 Python 类型名仅保留临时迁移别名，旧序列化字段不再接受。
+- 数据库新增 `0003` 迁移，拆分信息类型、来源 URL、纯文本/富文本、发布者、来源更新时间、附件和扩展；内容哈希不再错误地去重不同外部 ID。
+- 36 项 Python 测试通过，综合覆盖率 73%；OpenAPI、编译、Compose 配置和 `0002` 旧数据升级均通过。
+- 三个 Docker 镜像重新构建成功；隔离 Compose 栈确认 Core 就绪、Connector 可发现、PostgreSQL 位于 `0003`，真实 `/v1/sync` 返回带 `contract_version: 1.0` 的标准批次。验证容器、网络和数据库卷已删除。
+
 ## 2026-08-21：建立独立 Connector 平台边界
 
 ### 已完成

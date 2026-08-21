@@ -27,12 +27,16 @@ def test_connector_client_validates_manifest_and_sync_response() -> None:
             return httpx.Response(
                 200,
                 json={
+                    "contract_version": "1.0",
                     "items": [
                         {
                             "external_id": "one",
-                            "url": "https://campus.example/one",
+                            "item_type": "announcement",
+                            "source_url": "https://campus.example/one",
                             "title": "One",
-                            "body": "Body",
+                            "content_text": "Body",
+                            "attachments": [],
+                            "extensions": {},
                         }
                     ],
                     "next_cursor": {"last": "one"},
@@ -67,6 +71,61 @@ def test_connector_client_rejects_manifest_id_mismatch() -> None:
 
     with pytest.raises(ConnectorClientError) as raised:
         _ = client.manifest
+
+    assert raised.value.code is ConnectorErrorCode.PROTOCOL_MISMATCH
+
+
+def test_connector_client_requires_batch_contract_version() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/manifest":
+            return httpx.Response(200, json=manifest())
+        return httpx.Response(
+            200,
+            json={
+                "items": [],
+                "next_cursor": {},
+                "has_more": False,
+                "auth_state": "not_required",
+                "warnings": [],
+            },
+        )
+
+    client = ConnectorClient(
+        expected_connector_id="example.static",
+        base_url="https://connector.example",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    with pytest.raises(ConnectorClientError) as raised:
+        client.sync(SyncRequest(instance_id="source", config={}, cursor={}))
+
+    assert raised.value.code is ConnectorErrorCode.PROTOCOL_MISMATCH
+
+
+def test_connector_client_rejects_incomplete_campus_item() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/manifest":
+            return httpx.Response(200, json=manifest())
+        return httpx.Response(
+            200,
+            json={
+                "contract_version": "1.0",
+                "items": [{"external_id": "incomplete"}],
+                "next_cursor": {},
+                "has_more": False,
+                "auth_state": "not_required",
+                "warnings": [],
+            },
+        )
+
+    client = ConnectorClient(
+        expected_connector_id="example.static",
+        base_url="https://connector.example",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    with pytest.raises(ConnectorClientError) as raised:
+        client.sync(SyncRequest(instance_id="source", config={}, cursor={}))
 
     assert raised.value.code is ConnectorErrorCode.PROTOCOL_MISMATCH
 

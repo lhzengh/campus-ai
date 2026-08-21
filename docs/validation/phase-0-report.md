@@ -39,12 +39,12 @@
 2026-08-21 最新本地执行：
 
 ```text
-pytest: 27 passed（SDK、两个 Connector 与 Core）
-aggregate Python coverage: 71%
+pytest: 36 passed（SDK、两个 Connector 与 Core）
+aggregate Python coverage: 73%
 flutter analyze: No issues found
 flutter test: 4 passed
 flutter build linux --debug: succeeded
-Alembic 空 SQLite 数据库迁移: upgraded to 0002
+Alembic 空数据库及带旧消息的 SQLite `0002` 数据库迁移: upgraded to 0003
 Compose: 空 PostgreSQL 18 数据卷启动成功，api/postgres healthy
 Connector: Core 经内部 Bearer Token 发现静态 Connector Manifest；未启动的可选 Connector 返回 unavailable，不影响健康 Connector
 Source API: 通过 Connector Schema 校验并持久化一个仅使用保留示例域名的临时来源

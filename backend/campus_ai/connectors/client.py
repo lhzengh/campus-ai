@@ -10,12 +10,12 @@ from campus_connector_sdk import (
     AuthResult,
     AuthStatusRequest,
     BeginAuthRequest,
+    CampusItemBatch,
     ConfigValidationRequest,
     ConfigValidationResult,
     ConnectorErrorCode,
     ConnectorManifest,
     SubmitAuthRequest,
-    SyncBatch,
     SyncRequest,
 )
 
@@ -186,8 +186,56 @@ class ConnectorClient:
             self._request("POST", "/v1/auth/respond", payload=payload.model_dump(mode="json"))
         )
 
-    def sync(self, request: SyncRequest) -> SyncBatch:
+    def sync(self, request: SyncRequest) -> CampusItemBatch:
         _ = self.manifest
-        return SyncBatch.model_validate(
-            self._request("POST", "/v1/sync", payload=request.model_dump(mode="json"))
-        )
+        body = self._request("POST", "/v1/sync", payload=request.model_dump(mode="json"))
+        # Unlike SDK-side defaults, the process boundary must be self-describing.
+        required_batch_fields = {
+            "contract_version",
+            "items",
+            "next_cursor",
+            "has_more",
+            "auth_state",
+            "warnings",
+        }
+        if not required_batch_fields.issubset(body):
+            raise ConnectorClientError(
+                ConnectorErrorCode.PROTOCOL_MISMATCH,
+                "Connector batch is missing required CampusItemBatch v1 fields",
+            )
+        if body.get("contract_version") != CONTRACT_VERSION:
+            raise ConnectorClientError(
+                ConnectorErrorCode.PROTOCOL_MISMATCH,
+                f"Connector batch contract {body.get('contract_version')!r} does not match {CONTRACT_VERSION}",
+            )
+        required_item_fields = {
+            "external_id",
+            "item_type",
+            "source_url",
+            "title",
+            "content_text",
+            "attachments",
+            "extensions",
+        }
+        raw_items = body.get("items")
+        if not isinstance(raw_items, list) or any(
+            not isinstance(item, dict) or not required_item_fields.issubset(item)
+            for item in raw_items
+        ):
+            raise ConnectorClientError(
+                ConnectorErrorCode.PROTOCOL_MISMATCH,
+                "Connector batch contains an incomplete CampusItem v1 record",
+            )
+        try:
+            batch = CampusItemBatch.model_validate(body)
+        except ValueError as exc:
+            raise ConnectorClientError(
+                ConnectorErrorCode.PROTOCOL_MISMATCH,
+                "Connector sync response does not match CampusItemBatch v1",
+            ) from exc
+        if len(batch.items) > request.max_items:
+            raise ConnectorClientError(
+                ConnectorErrorCode.PROTOCOL_MISMATCH,
+                "Connector returned more items than Core requested",
+            )
+        return batch

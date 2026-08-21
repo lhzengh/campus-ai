@@ -121,7 +121,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SyncBatch"
+                $ref: "#/components/schemas/CampusItemBatch"
         "409":
           $ref: "#/components/responses/ConnectorError"
         "429":
@@ -275,14 +275,18 @@ components:
           type: integer
           minimum: 1
           maximum: 1000
-    SyncBatch:
+    CampusItemBatch:
       type: object
-      required: [items, next_cursor, has_more, auth_state, warnings]
+      required: [contract_version, items, next_cursor, has_more, auth_state, warnings]
       properties:
+        contract_version:
+          type: string
+          const: "1.0"
         items:
           type: array
+          maxItems: 1000
           items:
-            $ref: "#/components/schemas/ConnectorMessage"
+            $ref: "#/components/schemas/CampusItem"
         next_cursor:
           $ref: "#/components/schemas/JsonObject"
         has_more:
@@ -291,49 +295,130 @@ components:
           $ref: "#/components/schemas/AuthState"
         warnings:
           type: array
+          maxItems: 100
           items:
-            type: string
-    ConnectorMessage:
+            $ref: "#/components/schemas/SyncWarning"
+    CampusItem:
       type: object
-      required: [external_id, url, title, body, attachments, metadata]
+      required: [external_id, item_type, source_url, title, content_text, attachments, extensions]
       properties:
         external_id:
           type: string
           minLength: 1
           maxLength: 500
-        url:
+        item_type:
+          $ref: "#/components/schemas/CampusItemType"
+        source_url:
           type: string
           format: uri
         title:
           type: string
           minLength: 1
-        body:
+          maxLength: 2000
+        content_text:
           type: string
+          maxLength: 1000000
+        content_html:
+          type: [string, "null"]
+          maxLength: 2000000
+        publisher:
+          anyOf:
+            - $ref: "#/components/schemas/CampusPublisher"
+            - type: "null"
         published_at:
+          type: [string, "null"]
+          format: date-time
+        updated_at:
           type: [string, "null"]
           format: date-time
         attachments:
           type: array
+          maxItems: 100
           items:
-            $ref: "#/components/schemas/ConnectorAttachment"
-        metadata:
-          $ref: "#/components/schemas/JsonObject"
-    ConnectorAttachment:
+            $ref: "#/components/schemas/CampusAttachment"
+        extensions:
+          type: object
+          propertyNames:
+            pattern: "^[a-z0-9]+(?:[._-][a-z0-9]+)+$"
+          additionalProperties: true
+    CampusItemType:
+      type: string
+      enum: [announcement, news, event, resource, other]
+    CampusPublisher:
       type: object
-      required: [name, url, metadata]
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 500
+        external_id:
+          type: [string, "null"]
+          maxLength: 500
+    CampusAttachment:
+      type: object
+      required: [name, access]
       properties:
         external_id:
           type: [string, "null"]
+          maxLength: 500
         name:
           type: string
-        url:
-          type: string
-          format: uri
+          minLength: 1
+          maxLength: 1000
         media_type:
           type: [string, "null"]
+          maxLength: 255
+        size_bytes:
+          type: [integer, "null"]
+          minimum: 0
         content_hash:
           type: [string, "null"]
-        metadata:
+          maxLength: 200
+        access:
+          $ref: "#/components/schemas/AttachmentAccess"
+    AttachmentAccess:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [mode, url]
+          properties:
+            mode:
+              type: string
+              const: public_url
+            url:
+              type: string
+              format: uri
+            ref:
+              type: "null"
+        - type: object
+          additionalProperties: false
+          required: [mode, ref]
+          properties:
+            mode:
+              type: string
+              const: connector_fetch
+            url:
+              type: "null"
+            ref:
+              type: string
+              minLength: 1
+              maxLength: 2000
+    SyncWarning:
+      type: object
+      required: [code, message, details]
+      properties:
+        code:
+          type: string
+          pattern: "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        external_id:
+          type: [string, "null"]
+          maxLength: 500
+        details:
           $ref: "#/components/schemas/JsonObject"
     ConnectorError:
       type: object

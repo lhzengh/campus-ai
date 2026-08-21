@@ -11,7 +11,7 @@ The project is currently in **Phase 0: technical validation**. Source Connectors
 - Collects announcements on a daily schedule or through manually queued jobs.
 - Supports independently built static HTTP and Playwright Connector services.
 - Publishes a versioned HTTP/JSON Connector API and a standalone Python Connector SDK.
-- Normalizes titles, body text, publication times, URLs, metadata, and content fingerprints.
+- Normalizes source facts through the versioned `CampusItemBatch` contract while Core owns fingerprints, analysis, and notification state.
 - Prevents duplicate messages and duplicate background jobs.
 - Sends normalized content to a replaceable OpenAI-compatible cloud API.
 - Validates AI output against a structured schema before storing it.
@@ -104,8 +104,8 @@ The Flutter application is installed directly on each client device and is not p
 
 | Area | Status |
 | --- | --- |
-| Python tests | 27 passing across SDK, Connectors, and Core; 71% aggregate coverage |
-| PostgreSQL migrations | Clean database upgraded through Connector schema revision `0002` |
+| Python tests | 36 passing across SDK, Connectors, and Core; 73% aggregate coverage |
+| PostgreSQL migrations | Clean and populated revision `0002` databases upgraded through CampusItem revision `0003` |
 | Compose startup | Passed from a clean PostgreSQL 18 volume |
 | Persistent job queue | Enqueue, consume, deduplicate, and container-recreation persistence passed |
 | Playwright Connector | Independent image built successfully; Chromium launched and rendered a page |

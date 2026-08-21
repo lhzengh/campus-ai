@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from campus_connector_sdk.base import CampusConnector
-from campus_connector_sdk.models import CONTRACT_VERSION, ConnectorCapability, SyncBatch, SyncRequest
+from campus_connector_sdk.models import CONTRACT_VERSION, CampusItemBatch, ConnectorCapability, SyncRequest
 
 
 def assert_connector_conformance(
@@ -26,5 +26,5 @@ def assert_connector_conformance(
         batch = connector.sync(
             SyncRequest(instance_id="conformance-instance", config=normalized, cursor={}, max_items=10)
         )
-        assert isinstance(batch, SyncBatch)
-        SyncBatch.model_validate(batch.model_dump(mode="json"))
+        assert isinstance(batch, CampusItemBatch)
+        CampusItemBatch.model_validate(batch.model_dump(mode="json"))

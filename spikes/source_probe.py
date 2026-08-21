@@ -36,9 +36,9 @@ def main() -> int:
         parsed = [
             {
                 "external_id": message.external_id,
-                "url": message.url,
+                "source_url": message.source_url,
                 "has_title": bool(message.title),
-                "body_length": len(message.body),
+                "content_length": len(message.content_text),
                 "published_at": message.published_at.isoformat() if message.published_at else None,
             }
             for message in batch.items
@@ -49,7 +49,7 @@ def main() -> int:
                 "has_more": batch.has_more,
                 "success_rate": 1.0 if parsed else 0.0,
                 "items": parsed,
-                "warnings": batch.warnings,
+                "warnings": [warning.model_dump(mode="json") for warning in batch.warnings],
             }
         )
     except Exception as exc:

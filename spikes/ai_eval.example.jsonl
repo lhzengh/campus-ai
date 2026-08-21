@@ -1,0 +1,3 @@
+{"id":"academic-001","title":"课程补选确认通知","body":"请相关本科生于2026年8月21日17:00前登录教务系统确认补选结果。","profile":{"identity":"本科生"},"expected":{"important":true,"deadline_dates":["2026-08-21"]}}
+{"id":"news-001","title":"校园摄影展回顾","body":"校园摄影展已于昨日圆满结束，感谢各位同学参与。","profile":{"identity":"本科生"},"expected":{"important":false,"deadline_dates":[]}}
+{"id":"safety-001","title":"实验室安全培训","body":"进入实验室前须完成安全培训，报名截止日期为2026年9月1日。","profile":{"identity":"研究生"},"expected":{"important":true,"deadline_dates":["2026-09-01"]}}

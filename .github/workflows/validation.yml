@@ -1,0 +1,106 @@
+name: Phase 0 validation
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -e 'backend[dev]'
+      - run: pytest backend/tests --cov=campus_ai --cov-report=term-missing
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure ephemeral database credentials
+        shell: bash
+        run: |
+          db_user="ci_$(openssl rand -hex 6)"
+          db_name="ci_$(openssl rand -hex 6)"
+          db_password="$(openssl rand -hex 24)"
+          echo "POSTGRES_DB=$db_name" >> "$GITHUB_ENV"
+          echo "POSTGRES_USER=$db_user" >> "$GITHUB_ENV"
+          echo "POSTGRES_PASSWORD=$db_password" >> "$GITHUB_ENV"
+          echo "CAMPUS_AI_DATABASE_URL=postgresql+psycopg://$db_user:$db_password@postgres:5432/$db_name" >> "$GITHUB_ENV"
+      - run: docker compose config --quiet
+      - run: docker compose build api browser-worker
+      - run: docker compose up -d postgres api worker scheduler
+      - name: Verify API readiness
+        run: curl --fail --retry 20 --retry-delay 2 --retry-all-errors http://127.0.0.1:8000/health/ready
+      - name: Verify persistent worker queue
+        run: |
+          curl --fail --silent --show-error \
+            -X POST http://127.0.0.1:8000/v1/jobs \
+            -H 'Content-Type: application/json' \
+            --data '{"kind":"fetch_all","payload":{"run_key":"ci"},"dedupe_key":"fetch-all:ci","max_attempts":3}'
+          for attempt in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:8000/v1/jobs | grep -q '"status":"succeeded"'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+      - name: Verify Playwright Chromium runtime
+        run: >-
+          docker run --rm campus-ai-browser:dev python -c
+          "from playwright.sync_api import sync_playwright;
+          p=sync_playwright().start(); b=p.chromium.launch(headless=True);
+          page=b.new_page(); page.set_content('<title>campus-ai-browser-ok</title>');
+          assert page.title() == 'campus-ai-browser-ok'; b.close(); p.stop()"
+      - if: always()
+        run: docker compose logs --no-color
+      - if: always()
+        run: docker compose down --volumes --remove-orphans
+
+  flutter:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+          - os: windows-latest
+            target: windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - if: matrix.target == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+      - run: flutter pub get
+        working-directory: frontend
+      - run: flutter analyze
+        working-directory: frontend
+      - run: flutter test
+        working-directory: frontend
+      - run: flutter build ${{ matrix.target }} --debug
+        working-directory: frontend
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+        working-directory: frontend
+      - run: flutter build apk --debug
+        working-directory: frontend

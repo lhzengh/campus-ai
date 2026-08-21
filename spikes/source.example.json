@@ -1,0 +1,10 @@
+{
+  "index_url": "https://campus.example/notices",
+  "item_link_selector": "a.notice-link",
+  "title_selector": "h1.article-title",
+  "body_selector": "article.article-content",
+  "published_selector": "time.published-at",
+  "published_format": "%Y-%m-%d %H:%M",
+  "timezone_name": "Asia/Shanghai",
+  "request_interval_seconds": 0.5
+}

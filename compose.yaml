@@ -1,0 +1,92 @@
+name: campus-ai-validation
+
+x-backend: &backend
+  image: campus-ai-backend:${CAMPUS_AI_IMAGE_TAG:-dev}
+  build:
+    context: ./backend
+    target: runtime
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    CAMPUS_AI_DATABASE_URL: ${CAMPUS_AI_DATABASE_URL:?Set CAMPUS_AI_DATABASE_URL in .env}
+    CAMPUS_AI_TIMEZONE: ${CAMPUS_AI_TIMEZONE:-Asia/Shanghai}
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      # PostgreSQL 18+ keeps major-version-specific data below this parent.
+      # Mounting the parent also permits pg_upgrade --link across versions.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    <<: *backend
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    command: ["uvicorn", "campus_ai.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  worker:
+    <<: *backend
+    command: ["python", "-m", "campus_ai.worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      CAMPUS_AI_DATABASE_URL: ${CAMPUS_AI_DATABASE_URL:?Set CAMPUS_AI_DATABASE_URL in .env}
+      CAMPUS_AI_JOB_KINDS: fetch_all,fetch_source,analyze_message
+
+  scheduler:
+    <<: *backend
+    command: ["python", "-m", "campus_ai.scheduler"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  browser-worker:
+    <<: *backend
+    image: campus-ai-browser:${CAMPUS_AI_IMAGE_TAG:-dev}
+    profiles: ["browser"]
+    build:
+      context: ./backend
+      target: browser
+    command: ["python", "-m", "campus_ai.worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - portal-sessions:/app/data/sessions
+    environment:
+      CAMPUS_AI_DATABASE_URL: ${CAMPUS_AI_DATABASE_URL:?Set CAMPUS_AI_DATABASE_URL in .env}
+      CAMPUS_AI_JOB_KINDS: browser_fetch
+
+volumes:
+  postgres-data:
+  portal-sessions:

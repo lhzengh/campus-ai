@@ -18,8 +18,12 @@ def test_job_deduplication_and_completion(session: Session) -> None:
     assert claimed.status is JobStatus.running
     assert claimed.attempts == 1
 
-    complete_job(session, claimed)
+    complete_job(session, claimed, {"processed": 1})
     assert claimed.status is JobStatus.succeeded
+    assert claimed.result == {"processed": 1}
+    assert claimed.started_at is not None
+    assert claimed.finished_at is not None
+    assert claimed.duration_ms is not None
 
 
 def test_job_retries_then_fails(session: Session) -> None:

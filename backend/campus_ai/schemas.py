@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, time as dt_time
 from typing import Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from campus_connector_sdk import ConnectorManifest
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Deadline(BaseModel):
@@ -48,6 +49,10 @@ class JobView(BaseModel):
     attempts: int
     max_attempts: int
     available_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    duration_ms: int | None
+    result: dict[str, Any]
     last_error: str | None
 
 
@@ -70,11 +75,42 @@ class MessageView(BaseModel):
     extensions_json: dict[str, Any]
 
 
+class SourceSchedule(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["manual", "daily"] = "daily"
+    time: dt_time = dt_time(hour=7)
+    timezone: str = "Asia/Shanghai"
+
+    @field_validator("timezone")
+    @classmethod
+    def timezone_is_iana(cls, value: str) -> str:
+        """Reject platform-specific aliases and misspelled timezones."""
+
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("timezone must be a valid IANA name") from exc
+        return value
+
+
 class SourceCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(min_length=1, max_length=200)
     connector_id: str = Field(pattern=r"^[a-z0-9]+(?:[._-][a-z0-9]+)+$")
     config: dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
+    schedule: SourceSchedule | None = None
+
+
+class SourceUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    config: dict[str, Any] | None = None
+    enabled: bool | None = None
+    schedule: SourceSchedule | None = None
 
 
 class SourceView(BaseModel):
@@ -86,6 +122,9 @@ class SourceView(BaseModel):
     connector_version: str | None
     enabled: bool
     config: dict[str, Any]
+    schedule: SourceSchedule
+    next_run_at: datetime | None
+    archived_at: datetime | None
     auth_status: str
     sync_cursor: dict[str, Any]
     last_success_at: datetime | None
@@ -97,6 +136,13 @@ class SourceView(BaseModel):
 class SourceAuthResponse(BaseModel):
     challenge_id: str = Field(min_length=1)
     response: dict[str, str] = Field(default_factory=dict)
+
+
+class SourceCheckResult(BaseModel):
+    connector_status: Literal["available"]
+    config_status: Literal["valid"]
+    auth_status: str
+    checked_at: datetime
 
 
 class ConnectorRegistrationView(BaseModel):

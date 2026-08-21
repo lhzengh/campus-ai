@@ -1,22 +1,30 @@
 from __future__ import annotations
 
+from datetime import time
+from uuid import uuid4
+
 from campus_connector_sdk import AuthResult, ConnectorErrorCode
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from campus_ai import __version__
+from campus_ai.config import get_settings
 from campus_ai.connectors import ConnectorClient, ConnectorClientError, ConnectorEndpointRegistry, get_connector_registry
 from campus_ai.db import get_session
 from campus_ai.jobs import enqueue_job, list_jobs
-from campus_ai.models import Job, JobStatus, Message, Source
+from campus_ai.models import Job, JobStatus, Message, Source, utcnow
+from campus_ai.scheduling import next_daily_run
 from campus_ai.schemas import (
     ConnectorRegistrationView,
     JobCreate,
     JobView,
     MessageView,
     SourceAuthResponse,
+    SourceCheckResult,
     SourceCreate,
+    SourceSchedule,
+    SourceUpdate,
     SourceView,
 )
 
@@ -67,6 +75,9 @@ def retry_job(job_id: str, session: Session = Depends(get_session)) -> Job:
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     job.status = JobStatus.pending
+    job.started_at = None
+    job.finished_at = None
+    job.result = {}
     job.last_error = None
     session.commit()
     session.refresh(job)
@@ -140,6 +151,12 @@ def create_source(
         normalized_config = connector.validate_config(payload.config)
     except (ConnectorClientError, ValueError) as exc:
         raise _connector_http_error(exc) from exc
+    settings = get_settings()
+    schedule = payload.schedule or SourceSchedule(
+        mode="daily",
+        time=time(hour=settings.daily_fetch_hour, minute=settings.daily_fetch_minute),
+        timezone=settings.timezone,
+    )
     source = Source(
         name=payload.name,
         connector_id=manifest.connector_id,
@@ -147,7 +164,11 @@ def create_source(
         enabled=payload.enabled,
         config=normalized_config,
         auth_status="unknown",
+        schedule_mode=schedule.mode,
+        schedule_time=schedule.time,
+        schedule_timezone=schedule.timezone,
     )
+    _refresh_next_run(source)
     session.add(source)
     session.commit()
     session.refresh(source)
@@ -155,8 +176,109 @@ def create_source(
 
 
 @app.get("/v1/sources", response_model=list[SourceView])
-def sources(session: Session = Depends(get_session)) -> list[Source]:
-    return list(session.scalars(select(Source).order_by(Source.name, Source.created_at)).all())
+def sources(
+    include_archived: bool = False,
+    session: Session = Depends(get_session),
+) -> list[Source]:
+    query = select(Source)
+    if not include_archived:
+        query = query.where(Source.archived_at.is_(None))
+    return list(session.scalars(query.order_by(Source.name, Source.created_at)).all())
+
+
+def _source(source_id: str, session: Session, *, include_archived: bool = False) -> Source:
+    source = session.get(Source, source_id)
+    if source is None or (source.archived_at is not None and not include_archived):
+        raise HTTPException(status_code=404, detail="Source not found")
+    return source
+
+
+def _refresh_next_run(source: Source) -> None:
+    """Apply one scheduling policy consistently across all source mutations."""
+
+    if not source.enabled or source.archived_at is not None or source.schedule_mode == "manual":
+        source.next_run_at = None
+        return
+    source.next_run_at = next_daily_run(
+        source.schedule_time,
+        source.schedule_timezone,
+        after=utcnow(),
+    )
+
+
+def _validate_source_config(
+    connector: ConnectorClient,
+    config: dict[str, object],
+) -> dict[str, object]:
+    properties = connector.manifest.config_schema.get("properties", {})
+    secret_fields = {
+        name
+        for name, schema in properties.items()
+        if isinstance(schema, dict) and schema.get("x-campus-secret") is True
+    }
+    supplied_secrets = secret_fields.intersection(config)
+    if supplied_secrets:
+        names = ", ".join(sorted(supplied_secrets))
+        raise ValueError(f"Secret fields must use the authentication or Secret flow: {names}")
+    return connector.validate_config(config)
+
+
+@app.get("/v1/sources/{source_id}", response_model=SourceView)
+def get_source(source_id: str, session: Session = Depends(get_session)) -> Source:
+    return _source(source_id, session)
+
+
+@app.patch("/v1/sources/{source_id}", response_model=SourceView)
+def update_source(
+    source_id: str,
+    payload: SourceUpdate,
+    session: Session = Depends(get_session),
+    registry: ConnectorEndpointRegistry = Depends(get_connector_registry),
+) -> Source:
+    source = _source(source_id, session)
+    changes = payload.model_fields_set
+    if "config" in changes:
+        try:
+            connector = registry.get(source.connector_id, expected_version=source.connector_version)
+            source.config = _validate_source_config(connector, payload.config or {})
+        except (ConnectorClientError, ValueError) as exc:
+            raise _connector_http_error(exc) from exc
+    if "name" in changes and payload.name is not None:
+        source.name = payload.name
+    if "enabled" in changes and payload.enabled is not None:
+        source.enabled = payload.enabled
+    if "schedule" in changes and payload.schedule is not None:
+        source.schedule_mode = payload.schedule.mode
+        source.schedule_time = payload.schedule.time
+        source.schedule_timezone = payload.schedule.timezone
+    _refresh_next_run(source)
+    session.commit()
+    session.refresh(source)
+    return source
+
+
+@app.delete("/v1/sources/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
+def archive_source(source_id: str, session: Session = Depends(get_session)) -> None:
+    source = _source(source_id, session)
+    source.enabled = False
+    source.archived_at = utcnow()
+    source.next_run_at = None
+    source.credential_refs = {}
+    source.auth_status = "unknown"
+    session.commit()
+
+
+@app.post("/v1/sources/{source_id}/restore", response_model=SourceView)
+def restore_source(source_id: str, session: Session = Depends(get_session)) -> Source:
+    source = _source(source_id, session, include_archived=True)
+    if source.archived_at is None:
+        raise HTTPException(status_code=409, detail="Source is not archived")
+    source.archived_at = None
+    source.enabled = False
+    source.next_run_at = None
+    session.commit()
+    session.refresh(source)
+    return source
 
 
 def _source_and_connector(
@@ -164,14 +286,34 @@ def _source_and_connector(
     session: Session,
     registry: ConnectorEndpointRegistry,
 ) -> tuple[Source, ConnectorClient]:
-    source = session.get(Source, source_id)
-    if source is None:
-        raise HTTPException(status_code=404, detail="Source not found")
+    source = _source(source_id, session)
     try:
         connector = registry.get(source.connector_id, expected_version=source.connector_version)
     except (ConnectorClientError, ValueError) as exc:
         raise _connector_http_error(exc) from exc
     return source, connector
+
+
+@app.post("/v1/sources/{source_id}/check", response_model=SourceCheckResult)
+def check_source(
+    source_id: str,
+    session: Session = Depends(get_session),
+    registry: ConnectorEndpointRegistry = Depends(get_connector_registry),
+) -> SourceCheckResult:
+    source, connector = _source_and_connector(source_id, session, registry)
+    try:
+        connector.validate_config(source.config)
+        auth = connector.auth_status(source.id, source.config)
+    except (ConnectorClientError, ValueError) as exc:
+        raise _connector_http_error(exc) from exc
+    source.auth_status = auth.state.value
+    session.commit()
+    return SourceCheckResult(
+        connector_status="available",
+        config_status="valid",
+        auth_status=auth.state.value,
+        checked_at=utcnow(),
+    )
 
 
 @app.post("/v1/sources/{source_id}/auth/status", response_model=AuthResult)
@@ -231,12 +373,26 @@ def respond_to_source_auth(
 @app.post("/v1/sources/{source_id}/sync", response_model=JobView, status_code=status.HTTP_202_ACCEPTED)
 def sync_source(source_id: str, session: Session = Depends(get_session)) -> Job:
     source = session.get(Source, source_id)
-    if source is None or not source.enabled:
+    if source is None or not source.enabled or source.archived_at is not None:
         raise HTTPException(status_code=404, detail="Enabled source not found")
     return enqueue_job(
         session,
         kind="sync_source",
         payload={"source_id": source.id},
-        dedupe_key=f"manual-sync:{source.id}:{source.updated_at.isoformat()}",
+        dedupe_key=f"manual-sync:{source.id}:{uuid4()}",
         max_attempts=3,
+    )
+
+
+@app.post("/v1/sources/{source_id}/preview", response_model=JobView, status_code=status.HTTP_202_ACCEPTED)
+def preview_source(source_id: str, session: Session = Depends(get_session)) -> Job:
+    source = session.get(Source, source_id)
+    if source is None or not source.enabled or source.archived_at is not None:
+        raise HTTPException(status_code=404, detail="Enabled source not found")
+    return enqueue_job(
+        session,
+        kind="preview_source",
+        payload={"source_id": source.id, "max_items": 10},
+        dedupe_key=f"preview-source:{source.id}:{uuid4()}",
+        max_attempts=2,
     )

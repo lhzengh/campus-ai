@@ -58,15 +58,19 @@ def claim_job(session: Session, kinds: set[str] | None = None) -> Job | None:
     job.status = JobStatus.running
     job.attempts += 1
     job.locked_at = utcnow()
+    job.started_at = job.locked_at
+    job.finished_at = None
     job.last_error = None
     session.commit()
     session.refresh(job)
     return job
 
 
-def complete_job(session: Session, job: Job) -> None:
+def complete_job(session: Session, job: Job, result: dict[str, object] | None = None) -> None:
     job.status = JobStatus.succeeded
     job.locked_at = None
+    job.finished_at = utcnow()
+    job.result = result or {}
     session.commit()
 
 
@@ -75,8 +79,11 @@ def fail_job(session: Session, job: Job, error: Exception) -> None:
     job.locked_at = None
     if job.attempts >= job.max_attempts:
         job.status = JobStatus.failed
+        job.finished_at = utcnow()
     else:
         job.status = JobStatus.pending
+        job.started_at = None
+        job.finished_at = None
         job.available_at = utcnow() + timedelta(seconds=min(2**job.attempts, 300))
     session.commit()
 
@@ -86,7 +93,14 @@ def recover_stale_jobs(session: Session, lock_timeout_seconds: int) -> int:
     result = session.execute(
         update(Job)
         .where(Job.status == JobStatus.running, Job.locked_at < cutoff)
-        .values(status=JobStatus.pending, locked_at=None, available_at=utcnow(), last_error="Recovered stale lock")
+        .values(
+            status=JobStatus.pending,
+            locked_at=None,
+            started_at=None,
+            finished_at=None,
+            available_at=utcnow(),
+            last_error="Recovered stale lock",
+        )
     )
     session.commit()
     return result.rowcount or 0

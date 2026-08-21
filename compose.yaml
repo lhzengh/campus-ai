@@ -3,7 +3,8 @@ name: campus-ai-validation
 x-backend: &backend
   image: campus-ai-backend:${CAMPUS_AI_IMAGE_TAG:-dev}
   build:
-    context: ./backend
+    context: .
+    dockerfile: backend/Dockerfile
     target: runtime
   env_file:
     - path: .env
@@ -11,6 +12,8 @@ x-backend: &backend
   environment:
     CAMPUS_AI_DATABASE_URL: ${CAMPUS_AI_DATABASE_URL:?Set CAMPUS_AI_DATABASE_URL in .env}
     CAMPUS_AI_TIMEZONE: ${CAMPUS_AI_TIMEZONE:-Asia/Shanghai}
+    CAMPUS_AI_CONNECTOR_ENDPOINTS: ${CAMPUS_AI_CONNECTOR_ENDPOINTS:?Set CAMPUS_AI_CONNECTOR_ENDPOINTS in .env}
+    CAMPUS_AI_CONNECTOR_SHARED_TOKEN: ${CAMPUS_AI_CONNECTOR_SHARED_TOKEN:?Set CAMPUS_AI_CONNECTOR_SHARED_TOKEN in .env}
   restart: unless-stopped
 
 services:
@@ -46,7 +49,7 @@ services:
       migrate:
         condition: service_completed_successfully
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${CAMPUS_AI_API_PORT:-8000}:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live')"]
       interval: 10s
@@ -59,9 +62,11 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      connector-static:
+        condition: service_healthy
     environment:
       CAMPUS_AI_DATABASE_URL: ${CAMPUS_AI_DATABASE_URL:?Set CAMPUS_AI_DATABASE_URL in .env}
-      CAMPUS_AI_JOB_KINDS: fetch_all,fetch_source,analyze_message
+      CAMPUS_AI_JOB_KINDS: fetch_all,sync_source,fetch_source,browser_fetch,analyze_message
 
   scheduler:
     <<: *backend
@@ -70,23 +75,39 @@ services:
       migrate:
         condition: service_completed_successfully
 
-  browser-worker:
-    <<: *backend
-    image: campus-ai-browser:${CAMPUS_AI_IMAGE_TAG:-dev}
+  connector-static:
+    image: campus-ai-connector-static:${CAMPUS_AI_IMAGE_TAG:-dev}
+    build:
+      context: .
+      dockerfile: connectors/generic-static/Dockerfile
+    environment:
+      CAMPUS_CONNECTOR_SHARED_TOKEN: ${CAMPUS_AI_CONNECTOR_SHARED_TOKEN:?Set CAMPUS_AI_CONNECTOR_SHARED_TOKEN in .env}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health/live')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  connector-browser:
+    image: campus-ai-connector-browser:${CAMPUS_AI_IMAGE_TAG:-dev}
     profiles: ["browser"]
     build:
-      context: ./backend
-      target: browser
-    command: ["python", "-m", "campus_ai.worker"]
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
+      context: .
+      dockerfile: connectors/generic-browser/Dockerfile
     volumes:
-      - portal-sessions:/app/data/sessions
+      - connector-browser-sessions:/app/data/sessions
     environment:
-      CAMPUS_AI_DATABASE_URL: ${CAMPUS_AI_DATABASE_URL:?Set CAMPUS_AI_DATABASE_URL in .env}
-      CAMPUS_AI_JOB_KINDS: browser_fetch
+      CAMPUS_CONNECTOR_SHARED_TOKEN: ${CAMPUS_AI_CONNECTOR_SHARED_TOKEN:?Set CAMPUS_AI_CONNECTOR_SHARED_TOKEN in .env}
+      CAMPUS_CONNECTOR_SESSION_KEY: ${CAMPUS_AI_CONNECTOR_SESSION_KEY:-}
+      CAMPUS_CONNECTOR_SESSION_DIR: /app/data/sessions
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8200/health/live')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
 
 volumes:
   postgres-data:
-  portal-sessions:
+  connector-browser-sessions:

@@ -1,0 +1,350 @@
+openapi: 3.1.0
+info:
+  title: Campus AI Connector API
+  version: 1.0.0
+  description: Versioned boundary used by Campus AI Core to call independent source Connectors.
+servers:
+  - url: https://connector.example
+security:
+  - bearerAuth: []
+paths:
+  /health/live:
+    get:
+      security: []
+      operationId: connectorLive
+      responses:
+        "200":
+          description: Process is alive.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+  /v1/manifest:
+    get:
+      operationId: getConnectorManifest
+      responses:
+        "200":
+          description: Connector identity, compatibility, capabilities, and configuration schema.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectorManifest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /v1/config/validate:
+    post:
+      operationId: validateConnectorConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfigValidationRequest"
+      responses:
+        "200":
+          description: Normalized non-secret configuration.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigValidationResult"
+        "422":
+          $ref: "#/components/responses/ConnectorError"
+  /v1/auth/status:
+    post:
+      operationId: getConnectorAuthStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthStatusRequest"
+      responses:
+        "200":
+          description: Current source-instance authentication state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResult"
+  /v1/auth/begin:
+    post:
+      operationId: beginConnectorAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthStatusRequest"
+      responses:
+        "200":
+          description: Authentication state and optional user challenge.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResult"
+        "405":
+          $ref: "#/components/responses/ConnectorError"
+  /v1/auth/respond:
+    post:
+      operationId: respondToConnectorAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitAuthRequest"
+      responses:
+        "200":
+          description: Updated authentication state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResult"
+        "409":
+          $ref: "#/components/responses/ConnectorError"
+  /v1/sync:
+    post:
+      operationId: syncConnector
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SyncRequest"
+      responses:
+        "200":
+          description: Normalized incremental batch.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncBatch"
+        "409":
+          $ref: "#/components/responses/ConnectorError"
+        "429":
+          $ref: "#/components/responses/ConnectorError"
+        "503":
+          $ref: "#/components/responses/ConnectorError"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  responses:
+    Unauthorized:
+      description: Missing or invalid internal Connector token.
+    ConnectorError:
+      description: Typed error that Core can handle without parsing text.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ConnectorError"
+  schemas:
+    JsonObject:
+      type: object
+      additionalProperties: true
+    ConnectorManifest:
+      type: object
+      required: [connector_id, version, contract_version, display_name, capabilities, config_schema, requires_browser]
+      properties:
+        connector_id:
+          type: string
+          pattern: "^[a-z0-9]+(?:[._-][a-z0-9]+)+$"
+        version:
+          type: string
+        contract_version:
+          type: string
+          example: "1.0"
+        display_name:
+          type: string
+        description:
+          type: string
+        capabilities:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [sync, incremental_sync, attachments, user_assisted_auth, browser]
+        config_schema:
+          $ref: "#/components/schemas/JsonObject"
+        requires_browser:
+          type: boolean
+    ConfigValidationRequest:
+      type: object
+      required: [config]
+      properties:
+        config:
+          $ref: "#/components/schemas/JsonObject"
+    ConfigValidationResult:
+      type: object
+      required: [valid, normalized_config, errors]
+      properties:
+        valid:
+          type: boolean
+        normalized_config:
+          $ref: "#/components/schemas/JsonObject"
+        errors:
+          type: object
+          additionalProperties:
+            type: string
+    AuthStatusRequest:
+      type: object
+      required: [instance_id, config]
+      properties:
+        instance_id:
+          type: string
+        config:
+          $ref: "#/components/schemas/JsonObject"
+    SubmitAuthRequest:
+      allOf:
+        - $ref: "#/components/schemas/AuthStatusRequest"
+        - type: object
+          required: [challenge_id, response]
+          properties:
+            challenge_id:
+              type: string
+            response:
+              type: object
+              additionalProperties:
+                type: string
+    AuthResult:
+      type: object
+      required: [state, message]
+      properties:
+        state:
+          $ref: "#/components/schemas/AuthState"
+        challenge:
+          anyOf:
+            - $ref: "#/components/schemas/AuthChallenge"
+            - type: "null"
+        message:
+          type: string
+    AuthState:
+      type: string
+      enum: [not_required, auth_required, waiting_for_user, ready, expired]
+    AuthChallenge:
+      type: object
+      required: [challenge_id, kind, title, instructions, fields, metadata]
+      properties:
+        challenge_id:
+          type: string
+        kind:
+          type: string
+          enum: [username_password, sms_code, qr_scan, captcha, browser_interaction, confirmation]
+        title:
+          type: string
+        instructions:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuthChallengeField"
+        expires_at:
+          type: [string, "null"]
+          format: date-time
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+    AuthChallengeField:
+      type: object
+      required: [name, label, input_type, secret, required]
+      properties:
+        name:
+          type: string
+        label:
+          type: string
+        input_type:
+          type: string
+        secret:
+          type: boolean
+        required:
+          type: boolean
+    SyncRequest:
+      type: object
+      required: [instance_id, config, cursor, max_items]
+      properties:
+        instance_id:
+          type: string
+        config:
+          $ref: "#/components/schemas/JsonObject"
+        cursor:
+          $ref: "#/components/schemas/JsonObject"
+        max_items:
+          type: integer
+          minimum: 1
+          maximum: 1000
+    SyncBatch:
+      type: object
+      required: [items, next_cursor, has_more, auth_state, warnings]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectorMessage"
+        next_cursor:
+          $ref: "#/components/schemas/JsonObject"
+        has_more:
+          type: boolean
+        auth_state:
+          $ref: "#/components/schemas/AuthState"
+        warnings:
+          type: array
+          items:
+            type: string
+    ConnectorMessage:
+      type: object
+      required: [external_id, url, title, body, attachments, metadata]
+      properties:
+        external_id:
+          type: string
+          minLength: 1
+          maxLength: 500
+        url:
+          type: string
+          format: uri
+        title:
+          type: string
+          minLength: 1
+        body:
+          type: string
+        published_at:
+          type: [string, "null"]
+          format: date-time
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectorAttachment"
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+    ConnectorAttachment:
+      type: object
+      required: [name, url, metadata]
+      properties:
+        external_id:
+          type: [string, "null"]
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        media_type:
+          type: [string, "null"]
+        content_hash:
+          type: [string, "null"]
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+    ConnectorError:
+      type: object
+      required: [code, message, retryable, details]
+      properties:
+        code:
+          type: string
+          enum: [config_invalid, auth_required, access_denied, rate_limited, source_changed, temporary_failure, unsupported_operation, protocol_mismatch]
+        message:
+          type: string
+        retryable:
+          type: boolean
+        details:
+          $ref: "#/components/schemas/JsonObject"

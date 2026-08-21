@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from functools import lru_cache
 from typing import Literal
 
@@ -31,12 +32,23 @@ class Settings(BaseSettings):
     ntfy_base_url: str = ""
     fcm_project_id: str = ""
     google_application_credentials: str = ""
-    secret_key: str = ""
+    connector_endpoints: str = "{}"
+    connector_shared_token: str = ""
 
     @property
     def enabled_job_kinds(self) -> set[str] | None:
         values = {item.strip() for item in self.job_kinds.split(",") if item.strip()}
         return values or None
+
+    @property
+    def connector_endpoint_map(self) -> dict[str, str]:
+        try:
+            value = json.loads(self.connector_endpoints)
+        except json.JSONDecodeError as exc:
+            raise ValueError("CAMPUS_AI_CONNECTOR_ENDPOINTS must be a JSON object") from exc
+        if not isinstance(value, dict) or not all(isinstance(key, str) and isinstance(item, str) for key, item in value.items()):
+            raise ValueError("CAMPUS_AI_CONNECTOR_ENDPOINTS must map Connector IDs to URL strings")
+        return value
 
 
 @lru_cache

@@ -2,6 +2,35 @@
 
 本文件记录项目的重要工作、验证结果与遗留事项。需求变化记录在 `requirements.md`，架构选择后续单独记录在 `adr/`。
 
+## 2026-08-21：建立独立 Connector 平台边界
+
+### 已完成
+
+- 需求文档升级到 0.2.0，明确 Monorepo 下 Client、Core、Connector SDK 和 Connector 的可拆分边界。
+- 新增 ADR-0006、语言无关的 Connector OpenAPI 契约和 Connector 开发指南。
+- 新增独立 Python Connector SDK，包含 Manifest、配置校验、认证状态/挑战、统一消息、增量批次、标准错误、FastAPI 服务包装器和兼容性测试。
+- 将静态 HTTP 与 Playwright 实现从 Core 移入两个独立包和 Docker 镜像；Core 不再依赖 Playwright、selectolax 或具体 Connector 实现。
+- Core 新增运行时端点注册、内部 Bearer Token、Manifest ID/版本/协议检查、统一同步任务和 Connector 驱动的来源 API。
+- 数据库迁移到 `0002`，来源使用 `connector_id`、实现版本、游标、认证状态、凭据引用、最近成功时间和错误字段，不再使用 Core 内部 `kind` 分支。
+- 新增域名白名单、跨域重定向阻断、浏览器子请求限制、实例 ID 哈希路径和 Connector 自有加密会话。
+- 按用户要求在协议、安全、游标和故障隔离等非显然代码处补充简短英文注释。
+- Git 工作流改为功能分支开发；本次工作位于 `feature/connector-platform`。
+
+### 验证结果
+
+- 27 项 Python 测试通过，SDK、两个 Connector 和 Core 综合覆盖率 71%。
+- 空 SQLite 数据库成功迁移到 `0002`；Compose 配置校验通过。
+- Core、静态 Connector、浏览器 Connector 三个镜像均实际构建成功。
+- 浏览器 Connector 镜像内 Chromium 实际启动并渲染页面；Core 镜像确认不包含 Playwright。
+- 隔离 Compose 栈完成 PostgreSQL、迁移、静态 Connector、API、Worker 和 Scheduler 健康启动。
+- Core 使用内部 Token 成功读取静态 Connector Manifest，并将未启动的浏览器 Connector 标记为 `unavailable`，未影响健康 Connector。
+- 通过 Core API 创建并读取经过 Connector Schema 规范化的临时来源；验证栈、临时数据库卷和三个中断构建容器已删除。
+
+### 后续
+
+- Flutter 尚未实现根据 Connector Schema 生成来源配置表单和认证挑战界面。
+- 真实门户用户辅助登录、云端 AI 样本、FCM 真机、Windows 构建与 Debian 部署仍待验证。
+
 ## 2026-08-21：明确通用产品与配置边界
 
 - Campus AI 定位为面向不同学校和来源的通用系统，核心代码和公开文档不绑定具体机构。

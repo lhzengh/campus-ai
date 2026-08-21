@@ -1,5 +1,6 @@
 {
   "index_url": "https://campus.example/notices",
+  "allowed_hosts": ["campus.example"],
   "item_link_selector": "a.notice-link",
   "title_selector": "h1.article-title",
   "body_selector": "article.article-content",

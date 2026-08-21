@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "campus-ai-connector-sdk"
+version = "0.1.0"
+description = "Public protocol models and service helpers for Campus AI connectors"
+requires-python = ">=3.11,<3.15"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "pydantic>=2.10,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<1",
+  "pytest>=8.3,<9",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["campus_connector_sdk*"]
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers"
+testpaths = ["tests"]

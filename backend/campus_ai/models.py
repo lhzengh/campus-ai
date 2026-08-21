@@ -27,9 +27,15 @@ class Source(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String(200))
-    kind: Mapped[str] = mapped_column(String(50))
+    connector_id: Mapped[str] = mapped_column(String(200), index=True)
+    connector_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
     enabled: Mapped[bool] = mapped_column(default=True)
     config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    credential_refs: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    sync_cursor: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    auth_status: Mapped[str] = mapped_column(String(30), default="unknown")
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

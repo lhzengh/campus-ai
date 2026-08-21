@@ -1,6 +1,6 @@
 # Authenticated Portal Integration Profile
 
-> Status: generic session framework implemented; real source validation pending
+> Status: independent browser Connector framework implemented; real source validation pending
 > Updated: 2026-08-21
 
 ## Scope
@@ -27,11 +27,11 @@ URLs must be absolute HTTP(S) URLs, must not contain embedded credentials, and m
 1. The user starts authentication after initial deployment or session expiry.
 2. The system opens a visible, user-controlled browser flow.
 3. The user personally completes any permitted password, SMS, CAPTCHA, scan, or confirmation step.
-4. After successful login, only the required browser session state is encrypted and stored on the server.
-5. Scheduled collection reuses that state until an unauthorized response or login-page signature indicates expiry.
-6. The source pauses and sends a re-authentication notice without blocking unrelated sources.
+4. After successful login, only the required browser session state is encrypted and stored in the Connector's restricted volume; Core never receives cookies.
+5. Scheduled collection asks the Connector to reuse that state until an unauthorized response or login-page signature indicates expiry.
+6. The source pauses and sends a re-authentication notice without blocking unrelated Connectors or sources.
 
-The system must not read SMS messages automatically, relay verification codes, solve CAPTCHAs, or bypass access controls. If the portal rules do not allow automated access, the adapter must remain disabled and use an allowed alternative.
+The system must not read SMS messages automatically, relay verification codes, solve CAPTCHAs, or bypass access controls. If the portal rules do not allow automated access, the Connector must remain disabled and use an allowed alternative.
 
 ## Session maintenance
 

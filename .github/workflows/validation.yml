@@ -14,8 +14,8 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-      - run: pip install -e 'backend[dev]'
-      - run: pytest backend/tests --cov=campus_ai --cov-report=term-missing
+      - run: pip install -e packages/connector-sdk-python -e 'backend[dev]' -e 'connectors/generic-static[dev]' -e 'connectors/generic-browser[dev]'
+      - run: pytest packages/connector-sdk-python/tests connectors/generic-static/tests connectors/generic-browser/tests backend/tests --cov=campus_ai --cov-report=term-missing
 
   compose:
     runs-on: ubuntu-latest
@@ -27,13 +27,16 @@ jobs:
           db_user="ci_$(openssl rand -hex 6)"
           db_name="ci_$(openssl rand -hex 6)"
           db_password="$(openssl rand -hex 24)"
+          connector_token="$(openssl rand -hex 32)"
           echo "POSTGRES_DB=$db_name" >> "$GITHUB_ENV"
           echo "POSTGRES_USER=$db_user" >> "$GITHUB_ENV"
           echo "POSTGRES_PASSWORD=$db_password" >> "$GITHUB_ENV"
           echo "CAMPUS_AI_DATABASE_URL=postgresql+psycopg://$db_user:$db_password@postgres:5432/$db_name" >> "$GITHUB_ENV"
+          echo 'CAMPUS_AI_CONNECTOR_ENDPOINTS={"campus-ai.generic-static":"http://connector-static:8100","campus-ai.generic-browser":"http://connector-browser:8200"}' >> "$GITHUB_ENV"
+          echo "CAMPUS_AI_CONNECTOR_SHARED_TOKEN=$connector_token" >> "$GITHUB_ENV"
       - run: docker compose config --quiet
-      - run: docker compose build api browser-worker
-      - run: docker compose up -d postgres api worker scheduler
+      - run: docker compose build api connector-static connector-browser
+      - run: docker compose up -d postgres connector-static api worker scheduler
       - name: Verify API readiness
         run: curl --fail --retry 20 --retry-delay 2 --retry-all-errors http://127.0.0.1:8000/health/ready
       - name: Verify persistent worker queue
@@ -51,7 +54,7 @@ jobs:
           exit 1
       - name: Verify Playwright Chromium runtime
         run: >-
-          docker run --rm campus-ai-browser:dev python -c
+          docker run --rm campus-ai-connector-browser:dev python -c
           "from playwright.sync_api import sync_playwright;
           p=sync_playwright().start(); b=p.chromium.launch(headless=True);
           page=b.new_page(); page.set_content('<title>campus-ai-browser-ok</title>');

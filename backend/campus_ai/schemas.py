@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
+from campus_connector_sdk import ConnectorManifest
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -62,3 +63,39 @@ class MessageView(BaseModel):
     published_at: datetime | None
     fetched_at: datetime
     metadata_json: dict[str, Any]
+
+
+class SourceCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    connector_id: str = Field(pattern=r"^[a-z0-9]+(?:[._-][a-z0-9]+)+$")
+    config: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+class SourceView(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    connector_id: str
+    connector_version: str | None
+    enabled: bool
+    config: dict[str, Any]
+    auth_status: str
+    sync_cursor: dict[str, Any]
+    last_success_at: datetime | None
+    last_error: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SourceAuthResponse(BaseModel):
+    challenge_id: str = Field(min_length=1)
+    response: dict[str, str] = Field(default_factory=dict)
+
+
+class ConnectorRegistrationView(BaseModel):
+    connector_id: str
+    status: Literal["available", "unavailable", "incompatible"]
+    manifest: ConnectorManifest | None = None
+    error: str | None = None

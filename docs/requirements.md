@@ -1,7 +1,7 @@
 # Campus AI 需求规格说明书
 
 > 文档状态：基础范围已确认
-> 版本：0.1.4
+> 版本：0.2.0
 > 创建日期：2026-08-19
 > 适用阶段：需求确认与 MVP 规划
 
@@ -32,6 +32,7 @@ Campus AI 是一套面向个人使用、可逐步扩展的校园信息助手。�
 - 将重要信息整理为摘要、待办事项和截止时间并通知用户。
 - 在 Windows、Linux、Android 之间同步消息与处理状态。
 - 让新增来源、替换 AI 模型和新增通知渠道保持低成本。
+- 让其他学校的开发者能够在不了解 Campus AI Core 内部实现的情况下，独立开发、测试、发布和部署 Connector。
 - 用 Markdown 持续记录需求、决策、计划、变更与重要开发过程。
 
 ### 2.3 成功指标
@@ -58,6 +59,19 @@ MVP 试用两周后，以以下指标判断是否达到基本价值：
 - 后端可部署在固定 IP 的 Debian 服务器上，但部署环境和会话寿命都是实例级配置，不能成为所有来源的通用假设。
 
 通用认证门户的安全边界和验证清单见 [`sources/authenticated-portal.md`](sources/authenticated-portal.md)。具体学校的运行参数保存在仓库外或被忽略的 `docs/private/` 中。
+
+### 2.5 Client、Core 与 Connector 边界
+
+项目当前采用单一 Git 仓库，但 Client、Core、Connector SDK 和各 Connector 必须按照未来可拆分为独立仓库的边界组织、构建和测试：
+
+| 组件 | 负责 | 不负责 |
+| --- | --- | --- |
+| Client | 用户交互、本地缓存、离线操作、展示认证挑战、跨端体验 | 直接访问校园网站、保存门户会话、持有 AI 或 Connector 服务密钥、执行定时采集 |
+| Core | 用户与设备认证、来源实例、任务调度、持久化、去重、AI、通知、同步和审计 | 实现任何具体学校的登录、页面选择器或抓取规则 |
+| Connector | 理解自身配置、完成来源认证、维护来源会话、增量采集、解析并输出统一消息 | 直接访问 Core 数据库、调用 AI、决定重要性、发送设备通知或管理 Campus AI 用户 |
+| Connector SDK | 协议模型、服务包装器、错误模型、开发模板和兼容性测试 | 包含具体学校规则或依赖 Core 内部模块 |
+
+Client 只通过版本化 Client API 访问 Core；Core 只通过版本化 Connector API 调用 Connector。Connector 不得通过 Python 内部导入、共享数据库表或共享文件路径绕过协议边界。开发阶段可以同仓库运行，但每个组件必须具备独立依赖、测试、构建入口和容器镜像。
 
 ## 3. 用户与使用场景
 
@@ -106,12 +120,12 @@ MVP 试用两周后，以以下指标判断是否达到基本价值：
 
 ```mermaid
 flowchart LR
-    A[学校门户/公众号] --> B[来源适配器]
-    B --> C[规范化、去重与入库]
+    A[学校门户/公众号] --> B[独立 Connector]
+    B -->|Connector API| C[Core 规范化、去重与入库]
     C --> D[规则预处理]
     D --> E[AI 结构化分析]
     E --> F[通知决策]
-    F --> G[应用内收件箱]
+    F -->|Client API| G[Flutter 应用内收件箱]
     F --> H[桌面/Android 系统通知]
     G --> I[用户反馈与状态]
     H --> I
@@ -134,6 +148,9 @@ flowchart LR
 | FR-003 | Must | 服务端应独立于客户端持续执行定时任务；关闭任何客户端不得停止采集。 |
 | FR-004 | Must | 客户端应支持安全连接同一服务端并同步数据。 |
 | FR-005 | Should | 提供配置检查页，显示数据库、AI 服务、采集器和通知渠道是否可用。 |
+| FR-006 | Must | Client、Core 和 Connector 应分别构建和运行；关闭 Client 不影响 Core，停止单个 Connector 不影响 Core 与其他 Connector。 |
+| FR-007 | Must | 当前仓库可以保持 Monorepo，但组件间不得引用对方内部模块；跨组件共享仅通过版本化协议或独立发布的软件包。 |
+| FR-008 | Must | Core、Connector SDK、各 Connector 和 Flutter Client 应具有独立依赖声明、测试入口、构建产物和版本。 |
 
 ### 6.2 信息来源管理
 
@@ -150,6 +167,18 @@ flowchart LR
 | FR-109 | Must | 每个门户的入口 URL、允许域名和路径范围必须由运行时配置提供；URL 必须为绝对 HTTP(S) 地址且不得内嵌账号或密码。 |
 | FR-110 | Must | 门户会话应加密持久化并记录验证时间、最近成功时间和观测到的失效时间；会话寿命按来源实测，不设置全局固定重新验证周期。 |
 | FR-111 | Must | 网站、账号、密码、Cookie、验证码与 Token 不得硬编码；敏感值必须来自外部 Secret，普通来源配置只保存非敏感参数或 Secret 引用。 |
+| FR-112 | Must | 每个来源必须关联一个稳定的 `connector_id`；Core 不得根据学校名称、网站地址或页面结构选择代码路径。 |
+| FR-113 | Must | Connector 必须能够作为独立进程或容器通过 HTTP/JSON Connector API 运行，不得直接访问 Core 数据库或导入 Core 内部模块。 |
+| FR-114 | Must | Connector 应提供 Manifest，至少声明 Connector ID、版本、协议版本、显示名称、能力、配置 Schema 和是否需要浏览器。 |
+| FR-115 | Must | Connector 的普通输入由其配置 Schema 定义；Client 可据此生成配置表单，Core 只执行通用校验、权限控制和持久化。 |
+| FR-116 | Must | Connector 配置 Schema 必须能标识 Secret 字段；Core 只保存加密值或 Secret 引用，一次性验证码使用后不得持久化。 |
+| FR-117 | Must | Connector 认证流程使用统一状态和挑战模型，至少能表达无需认证、需要认证、等待用户输入、就绪和失效，以及密码、短信、扫码、验证码和浏览器交互等挑战。 |
+| FR-118 | Must | Connector 同步结果使用统一消息与批次结构，至少包含外部 ID、标题、正文、原文 URL、发布时间、附件、元数据、下一游标和是否仍有更多数据。 |
+| FR-119 | Must | Connector 使用统一错误码表达配置无效、需要认证、访问拒绝、限流、来源变化和临时故障；Core 据此决定暂停、退避、重试或通知用户。 |
+| FR-120 | Must | Connector SDK 应提供服务包装器和兼容性测试，使开发者只需实现 Manifest、配置校验、认证和同步逻辑。 |
+| FR-121 | Must | Core 必须校验 Connector ID、版本和协议兼容性，拒绝将注册 ID 与 Manifest 不匹配的服务用于同步。 |
+| FR-122 | Must | Connector 的网络地址和内部认证凭据必须由部署时注册或运行时配置提供，不得编译进 Core 或 Client。 |
+| FR-123 | Should | 官方 Connector 可与 Core 保持在同一仓库开发，但必须可以独立构建镜像、运行测试和发布；第三方 Connector 可位于完全独立的仓库。 |
 
 ### 6.3 采集与内容处理
 
@@ -244,6 +273,8 @@ flowchart LR
 | FR-604 | Must | 离线产生的状态变更应在恢复联网后上传；冲突按服务端版本和字段级规则处理。 |
 | FR-605 | Should | 服务端主动推送更新；连接不可用时退化为周期同步。 |
 | FR-606 | Must | 客户端应显示最后同步时间、离线状态和失败原因。 |
+| FR-607 | Must | Client 不得直接连接 Connector；所有配置、认证挑战和同步操作必须经由 Core 的权限检查与审计。 |
+| FR-608 | Must | Client API 与 Connector API 必须分别定义和版本化，任一协议的变化不得要求另一侧读取实现源码。 |
 
 ### 6.8 设置、审计与数据管理
 
@@ -279,7 +310,7 @@ docs/
 ├── architecture/            # 架构说明
 ├── adr/                     # 技术决策记录
 ├── api/                     # API 契约
-├── source-adapters/         # 各来源适配说明
+├── connectors/              # Connector 协议、开发与来源适配说明
 ├── testing/                 # 测试计划与报告
 └── operations/              # 部署、备份和排障
 ```
@@ -394,6 +425,9 @@ docs/
 ### 9.5 可维护性与可测试性
 
 - 来源适配、AI 提供者、通知渠道使用清晰接口与独立模块。
+- Connector SDK 不得依赖 Core；Connector 不得导入 Core，Core 不得导入任何具体 Connector 实现。
+- Client API 与 Connector API 的契约应保存在 `contracts/`，并具备破坏性变更检查或兼容性测试。
+- 每个 Connector 必须通过 SDK 提供的通用契约测试；解析规则另使用脱敏固定样本回归测试。
 - 业务规则不散落在 UI 中，由服务层集中实现。
 - API 采用版本化契约，并自动生成接口文档。
 - 核心解析器使用脱敏后的固定样本进行回归测试。
@@ -417,6 +451,8 @@ docs/
 | 定时与任务 | APScheduler + PostgreSQL 持久任务表起步；达到并发需求后评估 Redis + Dramatiq/Celery | MVP 部署简单，同时满足任务可恢复要求，并保留可靠队列升级路径 |
 | AI 接入 | 云端 OpenAI 兼容 API + 提供者适配层 + 结构化 JSON Schema | 便于切换云服务商并统一校验、重试和用量审计；MCP 不承担推理 |
 | 服务端实时同步 | REST + WebSocket/SSE | REST 易调试，实时通道用于通知与状态刷新 |
+| Connector 协议 | 版本化 HTTP/JSON + OpenAPI | 隔离语言和进程边界，允许 Connector 独立仓库、独立镜像和独立升级 |
+| Connector SDK | 独立 Python 包起步 | 封装协议、错误、认证挑战、服务启动与兼容性测试，降低新学校适配成本 |
 | 部署 | Docker Compose + 反向代理 | 适合个人服务器，便于备份和迁移 |
 | 测试 | pytest + Flutter test/integration_test | 与所选语言生态一致 |
 
@@ -476,10 +512,20 @@ docs/
 
 给定一次需求或架构变更，合并相关代码前，仓库中存在对应的 Markdown 需求变更、ADR 或开发记录，且不包含任何真实密钥和登录信息。
 
+### AC-10 Connector 独立性
+
+给定一个只依赖公开 Connector SDK 的示范 Connector，它可以在不安装 Core 包、不连接 Core 数据库的环境中独立启动并通过通用兼容性测试；Core 仅根据运行时注册的地址发现并调用它。
+
+### AC-11 Connector 替换与故障隔离
+
+给定两个符合相同协议的 Connector，当其中一个停止、返回不兼容 Manifest 或需要重新认证时，Core 记录可理解状态并只暂停受影响来源；另一个 Connector、Client API、AI 与通知任务继续运行。
+
 ## 13. 分阶段实施建议
 
 ### 阶段 0：来源与推送可行性验证
 
+- 定义 Client/Core/Connector 边界、Connector API、独立 SDK 与兼容性测试。
+- 将静态 HTTP 和 Playwright 验证实现迁移为不依赖 Core 的示范 Connector。
 - 确认目标学校门户、认证方式、页面结构和访问条款。
 - 确认目标公众号清单以及可持续、合规的数据获取路径。
 - 在至少一台真实 Android 设备验证后台通知。
@@ -520,7 +566,9 @@ docs/
 
 | 风险 | 影响 | 初步应对 |
 | --- | --- | --- |
-| 门户页面或登录流程变化 | 采集停止 | 适配器隔离、固定样本测试、健康监控、登录失效告警 |
+| 门户页面或登录流程变化 | 采集停止 | Connector 隔离、固定样本测试、健康监控、登录失效告警 |
+| Connector 协议过早失控 | 第三方实现频繁破坏或 Core 被迫兼容内部细节 | 版本化 OpenAPI、Manifest 协议版本、SDK 兼容性测试和明确弃用周期 |
+| 第三方 Connector 质量或权限过大 | 凭据泄露、越权访问或拖垮服务 | 独立容器、最小权限、允许域名、资源限制、签名/来源提示和审计日志 |
 | 公众号内容缺少稳定合规接口 | 无法稳定自动采集 | 阶段 0 先验证；优先官方/授权/RSS/邮件路径，允许人工转发作为降级方案 |
 | Android 后台与推送受厂商限制 | 通知延迟或丢失 | 真机验证、通知能力状态提示、每日摘要与客户端拉取兜底 |
 | AI 误判或幻觉 | 错过事项或错误行动 | 原文证据、规则兜底、置信度、反馈、测试集，不让 AI 自动执行高风险操作 |
@@ -553,6 +601,7 @@ docs/
 | 0.1.2 | 2026-08-19 | 明确 AI 使用云端服务，MVP 直连 OpenAI 兼容 API；MCP 仅作为未来工具层 | 基础范围已确认 |
 | 0.1.3 | 2026-08-21 | 确认首个部署实例采用交互验证码门户和固定 IP Debian 服务器；具体来源参数属于私有配置 | 基础范围已确认 |
 | 0.1.4 | 2026-08-21 | 明确项目为通用 Campus AI；禁止硬编码学校、网址、账号与密码，来源和部署参数全部外置 | 基础范围已确认 |
+| 0.2.0 | 2026-08-21 | 确认 Monorepo 下 Client、Core、Connector SDK 与 Connector 的可拆分边界；新增独立协议、Manifest、配置 Schema、认证挑战、统一输出和兼容性测试要求 | 基础范围已确认 |
 
 ## 附录 A：技术参考
 

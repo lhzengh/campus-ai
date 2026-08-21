@@ -1,21 +1,20 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Callable
 from datetime import date
-from pathlib import Path
 from typing import Any
 
+from campus_connector_sdk import AuthState, ConnectorMessage, SyncRequest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from campus_ai.ai.openai_compatible import OpenAICompatibleProvider
 from campus_ai.config import get_settings
+from campus_ai.connectors import ConnectorClientError, get_connector_registry
 from campus_ai.jobs import enqueue_job
-from campus_ai.models import Analysis, Message, Source
-from campus_ai.sources.base import DiscoveredItem, NormalizedMessage
-from campus_ai.sources.playwright_portal import PortalBrowserSession
-from campus_ai.sources.static_http import StaticHttpSourceAdapter
+from campus_ai.models import Analysis, Message, Source, utcnow
 
 
 JobHandler = Callable[[Session, dict[str, Any]], None]
@@ -26,7 +25,9 @@ def _content_hash(title: str, body: str) -> str:
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
-def _persist_message(session: Session, source: Source, normalized: NormalizedMessage) -> Message | None:
+def _persist_message(session: Session, source: Source, normalized: ConnectorMessage) -> Message | None:
+    """Persist one canonical message without exposing database models to Connectors."""
+
     content_hash = _content_hash(normalized.title, normalized.body)
     existing = session.scalar(
         select(Message).where(
@@ -50,7 +51,10 @@ def _persist_message(session: Session, source: Source, normalized: NormalizedMes
             body=normalized.body,
             published_at=normalized.published_at,
             content_hash=content_hash,
-            metadata_json=normalized.metadata,
+            metadata_json={
+                **normalized.metadata,
+                "attachments": [attachment.model_dump(mode="json") for attachment in normalized.attachments],
+            },
         )
         session.add(message)
     else:
@@ -59,7 +63,10 @@ def _persist_message(session: Session, source: Source, normalized: NormalizedMes
         existing.body = normalized.body
         existing.published_at = normalized.published_at
         existing.content_hash = content_hash
-        existing.metadata_json = normalized.metadata
+        existing.metadata_json = {
+            **normalized.metadata,
+            "attachments": [attachment.model_dump(mode="json") for attachment in normalized.attachments],
+        }
         message = existing
     session.commit()
     session.refresh(message)
@@ -75,57 +82,86 @@ def _persist_message(session: Session, source: Source, normalized: NormalizedMes
 
 def handle_fetch_all(session: Session, payload: dict[str, Any]) -> None:
     run_key = str(payload.get("run_key") or date.today().isoformat())
-    sources = session.scalars(select(Source).where(Source.enabled.is_(True))).all()
+    # Authentication-blocked sources stay paused until the user completes a challenge.
+    sources = session.scalars(
+        select(Source).where(
+            Source.enabled.is_(True),
+            Source.auth_status.notin_({"auth_required", "waiting_for_user", "expired"}),
+        )
+    ).all()
     for source in sources:
-        job_kind = "browser_fetch" if source.kind == "playwright_portal" else "fetch_source"
         enqueue_job(
             session,
-            kind=job_kind,
-            payload={"source_id": source.id},
+            kind="sync_source",
+            payload={"source_id": source.id, "run_key": run_key},
             dedupe_key=f"fetch-source:{source.id}:{run_key}",
             max_attempts=3,
         )
 
 
-def handle_fetch_source(session: Session, payload: dict[str, Any]) -> None:
+def handle_sync_source(session: Session, payload: dict[str, Any]) -> None:
+    """Run every source through the same versioned Connector client path."""
+
     source_id = str(payload["source_id"])
     source = session.get(Source, source_id)
     if source is None or not source.enabled:
         raise ValueError(f"Enabled source not found: {source_id}")
-    if source.kind != "static_http":
-        raise ValueError(f"Unsupported source kind for this worker: {source.kind}")
+    try:
+        connector = get_connector_registry().get(
+            source.connector_id,
+            expected_version=source.connector_version,
+        )
+        batch = connector.sync(
+            SyncRequest(
+                instance_id=source.id,
+                config=source.config,
+                cursor=source.sync_cursor,
+                max_items=int(payload.get("max_items", 100)),
+            )
+        )
+    except ConnectorClientError as exc:
+        source.last_error = f"{exc.code.value}: {exc}"
+        if exc.code.value == "auth_required":
+            source.auth_status = "auth_required"
+        session.commit()
+        raise
+    except ValueError as exc:
+        source.last_error = str(exc)
+        session.commit()
+        raise
 
-    adapter = StaticHttpSourceAdapter(**source.config)
-    adapter.health_check()
-    for item in adapter.discover():
-        raw = adapter.fetch(item)
-        normalized = adapter.normalize(item, raw)
+    for normalized in batch.items:
         _persist_message(session, source, normalized)
+
+    source.sync_cursor = batch.next_cursor
+    source.auth_status = batch.auth_state.value
+    source.last_success_at = utcnow()
+    source.last_error = None
+    session.commit()
+
+    if batch.has_more:
+        # A cursor-derived key permits pagination while preventing a broken
+        # Connector from creating an infinite sequence with an unchanged cursor.
+        cursor_json = json.dumps(batch.next_cursor, sort_keys=True, separators=(",", ":"))
+        cursor_hash = hashlib.sha256(cursor_json.encode("utf-8")).hexdigest()[:16]
+        run_key = str(payload.get("run_key") or date.today().isoformat())
+        enqueue_job(
+            session,
+            kind="sync_source",
+            payload={"source_id": source.id, "run_key": run_key},
+            dedupe_key=f"sync-source:{source.id}:{run_key}:{cursor_hash}",
+            max_attempts=3,
+        )
+
+
+def handle_fetch_source(session: Session, payload: dict[str, Any]) -> None:
+    """Compatibility alias for jobs created before Connector migration 0002."""
+    handle_sync_source(session, payload)
 
 
 def handle_browser_fetch(session: Session, payload: dict[str, Any]) -> None:
-    settings = get_settings()
-    source = session.get(Source, str(payload["source_id"]))
-    if source is None or not source.enabled or source.kind != "playwright_portal":
-        raise ValueError("Enabled Playwright portal source not found")
-    config = dict(source.config)
-    url = str(config.pop("url"))
-    encrypted_state_path = Path(str(config.pop("encrypted_state_path", "/app/data/sessions/portal.enc")))
-    portal = PortalBrowserSession(encrypted_state_path, settings.secret_key)
-    raw = portal.open_authenticated_page(url, headless=True)
-    adapter = StaticHttpSourceAdapter(
-        index_url=url,
-        item_link_selector="a",
-        title_selector=str(config["title_selector"]),
-        body_selector=str(config["body_selector"]),
-        published_selector=config.get("published_selector"),
-        published_format=config.get("published_format"),
-        timezone_name=str(config.get("timezone_name", settings.timezone)),
-        request_interval_seconds=0,
-    )
-    external_id = hashlib.sha256(url.encode("utf-8")).hexdigest()
-    normalized = adapter.normalize(DiscoveredItem(external_id=external_id, url=url), raw)
-    _persist_message(session, source, normalized)
+    """Compatibility alias for jobs created before Connector migration 0002."""
+    handle_sync_source(session, payload)
 
 
 def handle_analyze_message(session: Session, payload: dict[str, Any]) -> None:
@@ -155,6 +191,7 @@ def handle_analyze_message(session: Session, payload: dict[str, Any]) -> None:
 
 HANDLERS: dict[str, JobHandler] = {
     "fetch_all": handle_fetch_all,
+    "sync_source": handle_sync_source,
     "fetch_source": handle_fetch_source,
     "browser_fetch": handle_browser_fetch,
     "analyze_message": handle_analyze_message,

@@ -10,15 +10,13 @@ requires-python = ">=3.11,<3.15"
 dependencies = [
   "alembic>=1.14,<2",
   "apscheduler>=3.11,<4",
-  "cryptography>=44,<46",
+  "campus-ai-connector-sdk>=0.1,<0.2",
   "fastapi>=0.115,<1",
   "google-auth>=2.38,<3",
   "httpx>=0.28,<1",
-  "playwright>=1.50,<2",
   "psycopg[binary]>=3.2,<4",
   "pydantic-settings>=2.7,<3",
   "requests>=2.32,<3",
-  "selectolax>=0.3,<1",
   "sqlalchemy>=2.0,<3",
   "uvicorn[standard]>=0.34,<1",
 ]

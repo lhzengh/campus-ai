@@ -7,7 +7,8 @@ import sys
 import time
 from pathlib import Path
 
-from campus_ai.sources.static_http import StaticHttpSourceAdapter
+from campus_connector_sdk import SyncRequest
+from campus_ai_connector_generic_static import GenericStaticConnector
 
 
 def parse_args() -> argparse.Namespace:
@@ -20,35 +21,35 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     config = json.loads(args.config.read_text(encoding="utf-8"))
-    adapter = StaticHttpSourceAdapter(**config)
+    connector = GenericStaticConnector()
     report: dict[str, object] = {"source": config.get("index_url"), "requested_limit": args.limit}
     started = time.monotonic()
     try:
-        adapter.health_check()
-        items = adapter.discover()[: args.limit]
-        parsed = []
-        errors = []
-        for item in items:
-            try:
-                message = adapter.normalize(item, adapter.fetch(item))
-                parsed.append(
-                    {
-                        "external_id": message.external_id,
-                        "url": message.url,
-                        "has_title": bool(message.title),
-                        "body_length": len(message.body),
-                        "published_at": message.published_at.isoformat() if message.published_at else None,
-                    }
-                )
-            except Exception as exc:
-                errors.append({"url": item.url, "error": f"{type(exc).__name__}: {exc}"})
+        batch = connector.sync(
+            SyncRequest(
+                instance_id="source-probe",
+                config=config,
+                cursor={},
+                max_items=args.limit,
+            )
+        )
+        parsed = [
+            {
+                "external_id": message.external_id,
+                "url": message.url,
+                "has_title": bool(message.title),
+                "body_length": len(message.body),
+                "published_at": message.published_at.isoformat() if message.published_at else None,
+            }
+            for message in batch.items
+        ]
         report.update(
             {
-                "discovered": len(items),
                 "parsed": len(parsed),
-                "success_rate": len(parsed) / len(items) if items else 0,
+                "has_more": batch.has_more,
+                "success_rate": 1.0 if parsed else 0.0,
                 "items": parsed,
-                "errors": errors,
+                "warnings": batch.warnings,
             }
         )
     except Exception as exc:

@@ -1,3 +1,5 @@
+// Presents configured sources, Connector choices, authentication, and job actions.
+
 import 'package:campus_ai_client/core/app_localizations.dart';
 import 'package:campus_ai_client/data/source_models.dart';
 import 'package:campus_ai_client/features/sources/source_controller.dart';
@@ -6,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+/// Primary destination for managing institution-independent source instances.
 class SourcePage extends ConsumerWidget {
   const SourcePage({super.key});
 
@@ -592,6 +595,7 @@ class _PreviewSheet extends StatelessWidget {
   }
 }
 
+/// Dynamic dialog that renders fields supplied by a Connector challenge.
 class AuthChallengeDialog extends StatefulWidget {
   const AuthChallengeDialog({required this.challenge, super.key});
 

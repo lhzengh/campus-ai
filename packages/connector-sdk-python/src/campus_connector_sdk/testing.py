@@ -1,3 +1,5 @@
+"""Reusable contract checks for independently developed Connectors."""
+
 from __future__ import annotations
 
 from campus_connector_sdk.base import CampusConnector

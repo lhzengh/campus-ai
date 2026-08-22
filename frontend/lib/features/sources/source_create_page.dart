@@ -1,3 +1,5 @@
+// Creates and edits sources using each Connector's runtime configuration schema.
+
 import 'package:campus_ai_client/core/app_localizations.dart';
 import 'package:campus_ai_client/data/source_models.dart';
 import 'package:campus_ai_client/features/sources/schema_form.dart';

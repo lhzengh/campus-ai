@@ -1,3 +1,5 @@
+"""Runtime-configured collector for public, server-rendered web pages."""
+
 from __future__ import annotations
 
 import hashlib
@@ -61,6 +63,8 @@ def canonicalize_url(url: str) -> str:
 
 
 def _validated_url(value: object, *, field: str) -> str:
+    """Reject malformed or credential-bearing URLs at the trust boundary."""
+
     url = str(value or "")
     parts = urlsplit(url)
     if parts.scheme not in {"http", "https"} or not parts.hostname:
@@ -83,6 +87,8 @@ class GenericStaticConnector(CampusConnector):
 
     @property
     def manifest(self) -> ConnectorManifest:
+        """Advertise supported behavior and runtime configuration fields."""
+
         return ConnectorManifest(
             connector_id="campus-ai.generic-static",
             version="0.1.0",
@@ -93,6 +99,8 @@ class GenericStaticConnector(CampusConnector):
         )
 
     def validate_config(self, config: dict[str, object]) -> dict[str, object]:
+        """Normalize selectors, hosts, timing, and timestamp settings."""
+
         required_strings = ("item_link_selector", "title_selector", "body_selector")
         normalized = dict(config)
         normalized["index_url"] = _validated_url(config.get("index_url"), field="index_url")
@@ -140,6 +148,8 @@ class GenericStaticConnector(CampusConnector):
         return normalized
 
     def _get(self, url: str, *, allowed_hosts: set[str], interval: float) -> httpx.Response:
+        """Fetch one allowlisted URL while applying polite request pacing."""
+
         normalized_url = _validated_url(url, field="requested URL")
         host = (urlsplit(normalized_url).hostname or "").lower().rstrip(".")
         # Validate every discovered URL, not only the configured index URL.
@@ -199,6 +209,8 @@ class GenericStaticConnector(CampusConnector):
             ) from exc
 
     def _normalize(self, url: str, raw: str, config: dict[str, object]) -> CampusItem:
+        """Extract one page into the shared CampusItem contract."""
+
         tree = HTMLParser(raw)
         title_node = tree.css_first(str(config["title_selector"]))
         body_node = tree.css_first(str(config["body_selector"]))
@@ -239,6 +251,8 @@ class GenericStaticConnector(CampusConnector):
         )
 
     def sync(self, request: SyncRequest) -> CampusItemBatch:
+        """Discover changed pages and return a bounded incremental batch."""
+
         config = self.validate_config(request.config)
         index_url = str(config["index_url"])
         allowed_hosts = set(config["allowed_hosts"])

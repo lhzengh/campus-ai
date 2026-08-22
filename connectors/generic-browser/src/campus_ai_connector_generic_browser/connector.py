@@ -1,3 +1,5 @@
+"""Connector for one authenticated page rendered through Playwright."""
+
 from __future__ import annotations
 
 import hashlib
@@ -56,6 +58,8 @@ CONFIG_SCHEMA: dict[str, Any] = {
 
 
 def _validated_url(value: object, *, field: str) -> str:
+    """Validate configured URLs before any browser navigation occurs."""
+
     url = str(value or "")
     parsed = urlsplit(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
@@ -75,6 +79,8 @@ class GenericBrowserConnector(CampusConnector):
 
     @property
     def manifest(self) -> ConnectorManifest:
+        """Advertise browser and assisted-authentication capabilities."""
+
         return ConnectorManifest(
             connector_id="campus-ai.generic-browser",
             version="0.1.0",
@@ -91,6 +97,8 @@ class GenericBrowserConnector(CampusConnector):
         )
 
     def _session(self) -> EncryptedBrowserSession:
+        """Construct the isolated store that owns sensitive browser state."""
+
         try:
             return EncryptedBrowserSession(self.session_directory, self.secret_key)
         except (ValueError, TypeError) as exc:
@@ -100,6 +108,8 @@ class GenericBrowserConnector(CampusConnector):
             ) from exc
 
     def validate_config(self, config: dict[str, object]) -> dict[str, object]:
+        """Normalize browser targets, allowlists, selectors, and time settings."""
+
         normalized = dict(config)
         normalized["page_url"] = _validated_url(config.get("page_url"), field="page_url")
         normalized["login_url"] = _validated_url(config.get("login_url"), field="login_url")
@@ -135,11 +145,15 @@ class GenericBrowserConnector(CampusConnector):
         return normalized
 
     def auth_status(self, instance_id: str, config: dict[str, object]) -> AuthResult:
+        """Treat an encrypted session file as authentication readiness."""
+
         self.validate_config(config)
         state = AuthState.READY if self._session().has_state(instance_id) else AuthState.AUTH_REQUIRED
         return AuthResult(state=state)
 
     def begin_auth(self, instance_id: str, config: dict[str, object]) -> AuthResult:
+        """Describe the trusted-desktop login step without collecting secrets."""
+
         normalized = self.validate_config(config)
         challenge_id = str(uuid.uuid4())
         # The challenge carries instructions only; credentials never transit config.
@@ -172,6 +186,8 @@ class GenericBrowserConnector(CampusConnector):
         challenge_id: str,
         response: dict[str, str],
     ) -> AuthResult:
+        """Confirm that the requested browser session was captured locally."""
+
         self.validate_config(config)
         if self._challenges.get(instance_id) != challenge_id:
             raise ConnectorProtocolError(ConnectorErrorCode.AUTH_REQUIRED, "Authentication challenge is not active")
@@ -186,6 +202,8 @@ class GenericBrowserConnector(CampusConnector):
         return AuthResult(state=AuthState.READY)
 
     def sync(self, request: SyncRequest) -> CampusItemBatch:
+        """Render, normalize, and emit the page only when its content changes."""
+
         config = self.validate_config(request.config)
         url = str(config["page_url"])
         raw = self._session().open_authenticated_page(

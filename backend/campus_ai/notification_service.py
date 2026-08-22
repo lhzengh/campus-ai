@@ -1,3 +1,5 @@
+"""Coordinate idempotent notification delivery across provider adapters."""
+
 from __future__ import annotations
 
 from sqlalchemy import select
@@ -15,6 +17,8 @@ def send_once(
     endpoint: str,
     event: NotificationEvent,
 ) -> tuple[NotificationDelivery, bool]:
+    """Send an event only when no accepted delivery exists for the device."""
+
     existing = session.scalar(
         select(NotificationDelivery).where(
             NotificationDelivery.channel == channel.name,
@@ -23,6 +27,7 @@ def send_once(
         )
     )
     if existing is not None and existing.status == "accepted":
+        # Provider retries must not duplicate an event already accepted upstream.
         return existing, False
 
     try:

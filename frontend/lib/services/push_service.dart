@@ -1,3 +1,5 @@
+// Initializes optional Android FCM support and reports diagnostic state.
+
 import 'dart:convert';
 
 import 'package:campus_ai_client/core/app_config.dart';
@@ -10,6 +12,7 @@ final pushStatusProvider = FutureProvider<PushStatus>(
   (ref) => PushService().initialize(),
 );
 
+/// Presentation-neutral result of checking push notification readiness.
 class PushStatus {
   const PushStatus({required this.kind, this.detail = '', this.token});
 
@@ -19,13 +22,16 @@ class PushStatus {
   final String? token;
 }
 
+/// Android-only Firebase Messaging lifecycle used by the diagnostics UI.
 class PushService {
   static bool _listenersRegistered = false;
 
+  /// Registers the Android background entry point before the app starts.
   static void registerBackgroundHandler() {
     FirebaseMessaging.onBackgroundMessage(_backgroundMessageHandler);
   }
 
+  /// Initializes FCM when supported and returns a diagnostic result.
   Future<PushStatus> initialize() async {
     if (defaultTargetPlatform != TargetPlatform.android) {
       return const PushStatus(kind: 'unsupported_platform');
@@ -45,6 +51,7 @@ class PushService {
       final messaging = FirebaseMessaging.instance;
       final permission = await messaging.requestPermission();
       final token = await messaging.getToken();
+      // Process-wide listeners are registered once even if Riverpod rebuilds.
       if (!_listenersRegistered) {
         FirebaseMessaging.onMessage.listen(_logReceivedMessage);
         FirebaseMessaging.onMessageOpenedApp.listen(_logReceivedMessage);

@@ -1,3 +1,5 @@
+"""Deliver Android push messages through the FCM HTTP v1 API."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,6 +15,8 @@ FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging"
 
 
 class FcmNotificationChannel(NotificationChannel):
+    """FCM adapter that keeps service-account credentials on the server."""
+
     name = "fcm"
 
     def __init__(
@@ -30,6 +34,8 @@ class FcmNotificationChannel(NotificationChannel):
         self.client = client or httpx.Client(timeout=httpx.Timeout(20))
 
     def _access_token(self) -> str:
+        """Refresh a short-lived OAuth token for one provider request."""
+
         request = google.auth.transport.requests.Request()
         self.credentials.refresh(request)
         if not self.credentials.token:
@@ -37,6 +43,8 @@ class FcmNotificationChannel(NotificationChannel):
         return self.credentials.token
 
     def send(self, *, endpoint: str, event: NotificationEvent) -> NotificationResult:
+        """Send a high-priority data and display notification to one token."""
+
         response = self.client.post(
             f"https://fcm.googleapis.com/v1/projects/{self.project_id}/messages:send",
             headers={"Authorization": f"Bearer {self._access_token()}"},

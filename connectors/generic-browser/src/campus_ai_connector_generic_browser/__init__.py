@@ -1,3 +1,5 @@
+"""Public entry points for the generic authenticated-browser Connector."""
+
 from campus_ai_connector_generic_browser.connector import GenericBrowserConnector
 from campus_ai_connector_generic_browser.session import EncryptedBrowserSession
 

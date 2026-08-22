@@ -1,3 +1,5 @@
+// Builds Connector configuration fields from a constrained JSON Schema subset.
+
 import 'package:campus_ai_client/core/app_localizations.dart';
 import 'package:campus_ai_client/data/source_models.dart';
 import 'package:flutter/material.dart';
@@ -43,6 +45,7 @@ class _DynamicConfigFormState extends State<DynamicConfigForm> {
     for (final entry in _properties.entries) {
       final name = entry.key;
       final property = entry.value;
+      // Connector-owned secrets never become client form values or Core config.
       if (property['x-campus-secret'] == true) continue;
       final defaultValue = widget.initialValues.containsKey(name)
           ? widget.initialValues[name]

@@ -1,3 +1,5 @@
+"""Expose the Client API while keeping Connector and persistence details internal."""
+
 from __future__ import annotations
 
 from datetime import time
@@ -34,17 +36,23 @@ app = FastAPI(title="Campus AI Validation API", version=__version__)
 
 @app.get("/health/live")
 def live() -> dict[str, str]:
+    """Report process liveness without depending on external services."""
+
     return {"status": "ok", "version": __version__}
 
 
 @app.get("/health/ready")
 def ready(session: Session = Depends(get_session)) -> dict[str, str]:
+    """Confirm that the API can reach its configured database."""
+
     session.execute(text("SELECT 1"))
     return {"status": "ready"}
 
 
 @app.post("/v1/jobs", response_model=JobView, status_code=status.HTTP_201_CREATED)
 def create_job(payload: JobCreate, session: Session = Depends(get_session)) -> Job:
+    """Enqueue an internal validation job through the durable queue."""
+
     return enqueue_job(
         session,
         kind=payload.kind,
@@ -56,6 +64,8 @@ def create_job(payload: JobCreate, session: Session = Depends(get_session)) -> J
 
 @app.get("/v1/jobs", response_model=list[JobView])
 def jobs(limit: int = Query(default=100, ge=1, le=500), session: Session = Depends(get_session)) -> list[Job]:
+    """List recent jobs for operator and client diagnostics."""
+
     return list(list_jobs(session, limit=limit))
 
 
@@ -71,6 +81,8 @@ def job(job_id: str, session: Session = Depends(get_session)) -> Job:
 
 @app.post("/v1/jobs/{job_id}/retry", response_model=JobView)
 def retry_job(job_id: str, session: Session = Depends(get_session)) -> Job:
+    """Return a terminal or interrupted job to the pending state."""
+
     job = session.get(Job, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -86,6 +98,8 @@ def retry_job(job_id: str, session: Session = Depends(get_session)) -> Job:
 
 @app.get("/v1/messages", response_model=list[MessageView])
 def messages(limit: int = Query(default=50, ge=1, le=200), session: Session = Depends(get_session)) -> list[Message]:
+    """Return recent normalized messages for client synchronization."""
+
     return list(session.scalars(select(Message).order_by(Message.fetched_at.desc()).limit(limit)).all())
 
 
@@ -102,6 +116,8 @@ def _connector_http_error(exc: Exception) -> HTTPException:
 def connectors(
     registry: ConnectorEndpointRegistry = Depends(get_connector_registry),
 ) -> list[ConnectorRegistrationView]:
+    """Discover Connectors independently so one broken service stays isolated."""
+
     results: list[ConnectorRegistrationView] = []
     for connector_id in registry.connector_ids():
         try:
@@ -133,6 +149,8 @@ def create_source(
     session: Session = Depends(get_session),
     registry: ConnectorEndpointRegistry = Depends(get_connector_registry),
 ) -> Source:
+    """Validate Connector-owned configuration before persisting a source."""
+
     try:
         connector = registry.get(payload.connector_id)
         manifest = connector.manifest
@@ -180,6 +198,8 @@ def sources(
     include_archived: bool = False,
     session: Session = Depends(get_session),
 ) -> list[Source]:
+    """List active sources and optionally include soft-archived entries."""
+
     query = select(Source)
     if not include_archived:
         query = query.where(Source.archived_at.is_(None))
@@ -187,6 +207,8 @@ def sources(
 
 
 def _source(source_id: str, session: Session, *, include_archived: bool = False) -> Source:
+    """Load a visible source or return one consistent not-found response."""
+
     source = session.get(Source, source_id)
     if source is None or (source.archived_at is not None and not include_archived):
         raise HTTPException(status_code=404, detail="Source not found")
@@ -210,6 +232,8 @@ def _validate_source_config(
     connector: ConnectorClient,
     config: dict[str, object],
 ) -> dict[str, object]:
+    """Keep secret fields out of ordinary source configuration updates."""
+
     properties = connector.manifest.config_schema.get("properties", {})
     secret_fields = {
         name
@@ -225,6 +249,8 @@ def _validate_source_config(
 
 @app.get("/v1/sources/{source_id}", response_model=SourceView)
 def get_source(source_id: str, session: Session = Depends(get_session)) -> Source:
+    """Return one non-archived source instance."""
+
     return _source(source_id, session)
 
 
@@ -235,6 +261,8 @@ def update_source(
     session: Session = Depends(get_session),
     registry: ConnectorEndpointRegistry = Depends(get_connector_registry),
 ) -> Source:
+    """Update mutable source fields while preserving Connector identity."""
+
     source = _source(source_id, session)
     changes = payload.model_fields_set
     if "config" in changes:
@@ -259,6 +287,8 @@ def update_source(
 
 @app.delete("/v1/sources/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
 def archive_source(source_id: str, session: Session = Depends(get_session)) -> None:
+    """Soft-archive a source and remove live credential references."""
+
     source = _source(source_id, session)
     source.enabled = False
     source.archived_at = utcnow()
@@ -270,6 +300,8 @@ def archive_source(source_id: str, session: Session = Depends(get_session)) -> N
 
 @app.post("/v1/sources/{source_id}/restore", response_model=SourceView)
 def restore_source(source_id: str, session: Session = Depends(get_session)) -> Source:
+    """Restore an archived source in a safe disabled state."""
+
     source = _source(source_id, session, include_archived=True)
     if source.archived_at is None:
         raise HTTPException(status_code=409, detail="Source is not archived")
@@ -286,6 +318,8 @@ def _source_and_connector(
     session: Session,
     registry: ConnectorEndpointRegistry,
 ) -> tuple[Source, ConnectorClient]:
+    """Resolve a source together with its version-pinned Connector client."""
+
     source = _source(source_id, session)
     try:
         connector = registry.get(source.connector_id, expected_version=source.connector_version)
@@ -300,6 +334,8 @@ def check_source(
     session: Session = Depends(get_session),
     registry: ConnectorEndpointRegistry = Depends(get_connector_registry),
 ) -> SourceCheckResult:
+    """Validate a source without collecting or persisting messages."""
+
     source, connector = _source_and_connector(source_id, session, registry)
     try:
         connector.validate_config(source.config)
@@ -322,6 +358,8 @@ def source_auth_status(
     session: Session = Depends(get_session),
     registry: ConnectorEndpointRegistry = Depends(get_connector_registry),
 ) -> AuthResult:
+    """Refresh the persisted summary of Connector-owned auth state."""
+
     source, connector = _source_and_connector(source_id, session, registry)
     try:
         result = connector.auth_status(source.id, source.config)
@@ -338,6 +376,8 @@ def begin_source_auth(
     session: Session = Depends(get_session),
     registry: ConnectorEndpointRegistry = Depends(get_connector_registry),
 ) -> AuthResult:
+    """Start a provider-neutral authentication challenge for the client."""
+
     source, connector = _source_and_connector(source_id, session, registry)
     try:
         result = connector.begin_auth(source.id, source.config)
@@ -355,6 +395,8 @@ def respond_to_source_auth(
     session: Session = Depends(get_session),
     registry: ConnectorEndpointRegistry = Depends(get_connector_registry),
 ) -> AuthResult:
+    """Forward ephemeral challenge input without storing it in source config."""
+
     source, connector = _source_and_connector(source_id, session, registry)
     try:
         result = connector.submit_auth_response(
@@ -372,6 +414,8 @@ def respond_to_source_auth(
 
 @app.post("/v1/sources/{source_id}/sync", response_model=JobView, status_code=status.HTTP_202_ACCEPTED)
 def sync_source(source_id: str, session: Session = Depends(get_session)) -> Job:
+    """Queue one explicit source synchronization and return immediately."""
+
     source = session.get(Source, source_id)
     if source is None or not source.enabled or source.archived_at is not None:
         raise HTTPException(status_code=404, detail="Enabled source not found")
@@ -386,6 +430,8 @@ def sync_source(source_id: str, session: Session = Depends(get_session)) -> Job:
 
 @app.post("/v1/sources/{source_id}/preview", response_model=JobView, status_code=status.HTTP_202_ACCEPTED)
 def preview_source(source_id: str, session: Session = Depends(get_session)) -> Job:
+    """Queue a bounded preview that does not advance collection state."""
+
     source = session.get(Source, source_id)
     if source is None or not source.enabled or source.archived_at is not None:
         raise HTTPException(status_code=404, detail="Enabled source not found")

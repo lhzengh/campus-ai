@@ -1,3 +1,5 @@
+// Provides English-first UI strings with optional Simplified Chinese support.
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 

@@ -1,3 +1,5 @@
+"""Call OpenAI-compatible chat APIs and validate structured analysis output."""
+
 from __future__ import annotations
 
 import json
@@ -16,6 +18,8 @@ SYSTEM_PROMPT = """你是校园消息分析器。只根据给出的原文和用�
 
 
 class OpenAICompatibleProvider(AIProvider):
+    """Server-side adapter for providers exposing the chat completions contract."""
+
     prompt_version = "campus-message-v1"
 
     def __init__(
@@ -37,6 +41,8 @@ class OpenAICompatibleProvider(AIProvider):
         self.client = client or httpx.Client(timeout=httpx.Timeout(timeout_seconds))
 
     def _response_format(self) -> dict[str, Any]:
+        """Select strict JSON Schema output with a compatibility fallback mode."""
+
         if self.output_mode == "json_object":
             return {"type": "json_object"}
         return {
@@ -49,6 +55,8 @@ class OpenAICompatibleProvider(AIProvider):
         }
 
     def analyze(self, *, title: str, body: str, profile: dict[str, Any]) -> AIResponse:
+        """Analyze one normalized message and reject malformed provider output."""
+
         payload = {
             "model": self.model,
             "temperature": 0,
@@ -78,6 +86,7 @@ class OpenAICompatibleProvider(AIProvider):
         except (KeyError, IndexError, TypeError) as exc:
             raise ValueError("Cloud AI response did not contain message content") from exc
         if isinstance(content, list):
+            # Some compatible providers return typed content parts instead of a string.
             content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
         result = AnalysisResult.model_validate_json(content)
         return AIResponse(result=result, latency_ms=latency_ms, usage=data.get("usage", {}))

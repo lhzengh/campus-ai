@@ -1,5 +1,8 @@
+// Reads deployment-specific values supplied through Flutter build defines.
+
 import 'package:firebase_core/firebase_core.dart';
 
+/// Compile-time client configuration with no institution-specific defaults.
 abstract final class AppConfig {
   static const apiBaseUrl = String.fromEnvironment('CAMPUS_AI_API_URL');
 
@@ -17,7 +20,9 @@ abstract final class AppConfig {
     'FIREBASE_MESSAGING_SENDER_ID',
   );
 
+  /// Returns complete Firebase options, or null when push is not configured.
   static FirebaseOptions? get firebaseOptions {
+    // Partial Firebase configuration is treated as disabled, not guessed.
     if (_firebaseApiKey.isEmpty ||
         _firebaseAppId.isEmpty ||
         _firebaseProjectId.isEmpty ||

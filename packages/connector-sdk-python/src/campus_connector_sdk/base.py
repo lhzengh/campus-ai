@@ -1,3 +1,5 @@
+"""Framework-neutral interface implemented by every Python Connector."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -26,9 +28,13 @@ class CampusConnector(ABC):
         """Validate and normalize non-secret instance configuration."""
 
     def auth_status(self, instance_id: str, config: dict[str, object]) -> AuthResult:
+        """Report whether this Connector instance is ready to synchronize."""
+
         return AuthResult(state=AuthState.NOT_REQUIRED)
 
     def begin_auth(self, instance_id: str, config: dict[str, object]) -> AuthResult:
+        """Start optional user-assisted authentication."""
+
         raise ConnectorProtocolError(
             ConnectorErrorCode.UNSUPPORTED_OPERATION,
             "This Connector does not require interactive authentication",
@@ -41,6 +47,8 @@ class CampusConnector(ABC):
         challenge_id: str,
         response: dict[str, str],
     ) -> AuthResult:
+        """Accept data for an active user-assisted authentication challenge."""
+
         raise ConnectorProtocolError(
             ConnectorErrorCode.UNSUPPORTED_OPERATION,
             "This Connector does not accept authentication responses",

@@ -1,3 +1,5 @@
+// Shows deployment, cloud AI, and push-notification diagnostics.
+
 import 'package:campus_ai_client/core/app_config.dart';
 import 'package:campus_ai_client/core/app_localizations.dart';
 import 'package:campus_ai_client/services/push_service.dart';
@@ -5,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+/// Read-only diagnostics and privacy-boundary destination.
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 

@@ -1,3 +1,5 @@
+"""Call out-of-process Connectors through the versioned protocol boundary."""
+
 from __future__ import annotations
 
 from functools import cached_property
@@ -52,10 +54,14 @@ def validate_connector_endpoint(value: str) -> str:
 
 
 def _major(version: str) -> str:
+    """Extract the compatibility-significant major version component."""
+
     return version.split(".", maxsplit=1)[0]
 
 
 class ConnectorClient:
+    """Validate Connector identity and normalize remote protocol failures."""
+
     def __init__(
         self,
         *,
@@ -72,6 +78,8 @@ class ConnectorClient:
         self.client = client or httpx.Client(timeout=httpx.Timeout(30))
 
     def _request(self, method: str, path: str, *, payload: dict[str, object] | None = None) -> dict[str, object]:
+        """Perform one authenticated request and require an object response."""
+
         try:
             response = self.client.request(
                 method,
@@ -116,6 +124,8 @@ class ConnectorClient:
 
     @cached_property
     def manifest(self) -> ConnectorManifest:
+        """Load and pin the remote Connector identity for later operations."""
+
         # Cache identity per client so every operation uses the same verified peer.
         try:
             manifest = ConnectorManifest.model_validate(self._request("GET", "/v1/manifest"))
@@ -143,6 +153,8 @@ class ConnectorClient:
         return manifest
 
     def validate_config(self, config: dict[str, object]) -> dict[str, object]:
+        """Ask the owning Connector to validate and normalize public config."""
+
         _ = self.manifest
         result = ConfigValidationResult.model_validate(
             self._request(
@@ -159,11 +171,15 @@ class ConnectorClient:
         return result.normalized_config
 
     def auth_status(self, instance_id: str, config: dict[str, object]) -> AuthResult:
+        """Read authentication state without beginning user interaction."""
+
         _ = self.manifest
         payload = AuthStatusRequest(instance_id=instance_id, config=config)
         return AuthResult.model_validate(self._request("POST", "/v1/auth/status", payload=payload.model_dump(mode="json")))
 
     def begin_auth(self, instance_id: str, config: dict[str, object]) -> AuthResult:
+        """Request the next Connector-defined authentication challenge."""
+
         _ = self.manifest
         payload = BeginAuthRequest(instance_id=instance_id, config=config)
         return AuthResult.model_validate(self._request("POST", "/v1/auth/begin", payload=payload.model_dump(mode="json")))
@@ -175,6 +191,8 @@ class ConnectorClient:
         challenge_id: str,
         response: dict[str, str],
     ) -> AuthResult:
+        """Submit ephemeral challenge input directly to the Connector."""
+
         _ = self.manifest
         payload = SubmitAuthRequest(
             instance_id=instance_id,
@@ -187,6 +205,8 @@ class ConnectorClient:
         )
 
     def sync(self, request: SyncRequest) -> CampusItemBatch:
+        """Fetch one bounded batch and enforce the complete wire contract."""
+
         _ = self.manifest
         body = self._request("POST", "/v1/sync", payload=request.model_dump(mode="json"))
         # Unlike SDK-side defaults, the process boundary must be self-describing.

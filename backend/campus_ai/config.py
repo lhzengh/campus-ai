@@ -1,3 +1,5 @@
+"""Load deployment-owned Core settings from environment variables."""
+
 from __future__ import annotations
 
 import json
@@ -9,6 +11,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """Validated runtime configuration shared by API, workers, and schedulers."""
+
     model_config = SettingsConfigDict(
         env_prefix="CAMPUS_AI_",
         env_file=".env",
@@ -37,11 +41,15 @@ class Settings(BaseSettings):
 
     @property
     def enabled_job_kinds(self) -> set[str] | None:
+        """Return the optional worker allowlist, or all kinds when unset."""
+
         values = {item.strip() for item in self.job_kinds.split(",") if item.strip()}
         return values or None
 
     @property
     def connector_endpoint_map(self) -> dict[str, str]:
+        """Decode the runtime Connector registry without defining it in code."""
+
         try:
             value = json.loads(self.connector_endpoints)
         except json.JSONDecodeError as exc:
@@ -53,4 +61,6 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """Build settings once per process so every component sees one snapshot."""
+
     return Settings()

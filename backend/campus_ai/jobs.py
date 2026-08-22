@@ -1,3 +1,5 @@
+"""Implement the durable, deduplicated job queue used by Core workers."""
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -18,6 +20,8 @@ def enqueue_job(
     dedupe_key: str,
     max_attempts: int = 3,
 ) -> Job:
+    """Create a job once for a caller-provided idempotency key."""
+
     existing = session.scalar(select(Job).where(Job.dedupe_key == dedupe_key))
     if existing is not None:
         session.commit()
@@ -28,6 +32,7 @@ def enqueue_job(
     try:
         session.commit()
     except IntegrityError:
+        # A concurrent producer may win after the optimistic existence check.
         session.rollback()
         existing = session.scalar(select(Job).where(Job.dedupe_key == dedupe_key))
         if existing is None:
@@ -38,6 +43,8 @@ def enqueue_job(
 
 
 def _claim_query(kinds: set[str] | None) -> Select[tuple[Job]]:
+    """Build a locking query that lets multiple workers skip claimed rows."""
+
     query = (
         select(Job)
         .where(Job.status == JobStatus.pending, Job.available_at <= utcnow())
@@ -51,6 +58,8 @@ def _claim_query(kinds: set[str] | None) -> Select[tuple[Job]]:
 
 
 def claim_job(session: Session, kinds: set[str] | None = None) -> Job | None:
+    """Atomically move the oldest eligible job into the running state."""
+
     job = session.scalar(_claim_query(kinds))
     if job is None:
         session.rollback()
@@ -67,6 +76,8 @@ def claim_job(session: Session, kinds: set[str] | None = None) -> Job | None:
 
 
 def complete_job(session: Session, job: Job, result: dict[str, object] | None = None) -> None:
+    """Persist a successful terminal state and its structured diagnostics."""
+
     job.status = JobStatus.succeeded
     job.locked_at = None
     job.finished_at = utcnow()
@@ -75,6 +86,8 @@ def complete_job(session: Session, job: Job, result: dict[str, object] | None = 
 
 
 def fail_job(session: Session, job: Job, error: Exception) -> None:
+    """Retry with bounded exponential backoff or record a terminal failure."""
+
     job.last_error = f"{type(error).__name__}: {error}"[:4000]
     job.locked_at = None
     if job.attempts >= job.max_attempts:
@@ -89,6 +102,8 @@ def fail_job(session: Session, job: Job, error: Exception) -> None:
 
 
 def recover_stale_jobs(session: Session, lock_timeout_seconds: int) -> int:
+    """Release running jobs whose worker stopped refreshing the durable lock."""
+
     cutoff = utcnow() - timedelta(seconds=lock_timeout_seconds)
     result = session.execute(
         update(Job)
@@ -107,4 +122,6 @@ def recover_stale_jobs(session: Session, lock_timeout_seconds: int) -> int:
 
 
 def list_jobs(session: Session, limit: int = 100) -> Iterable[Job]:
+    """Return recent jobs for diagnostics and client-side polling."""
+
     return session.scalars(select(Job).order_by(Job.created_at.desc()).limit(limit)).all()

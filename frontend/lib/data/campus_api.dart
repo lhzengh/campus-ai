@@ -1,9 +1,12 @@
+// Implements the typed HTTP boundary between the Flutter client and Core.
+
 import 'dart:convert';
 
 import 'package:campus_ai_client/data/campus_message.dart';
 import 'package:campus_ai_client/data/source_models.dart';
 import 'package:http/http.dart' as http;
 
+/// Small Core API client that validates deployment URLs and response shapes.
 class CampusApi {
   CampusApi({required String baseUrl, http.Client? client})
     : baseUrl = _validateBaseUrl(baseUrl),
@@ -38,6 +41,7 @@ class CampusApi {
     return normalized;
   }
 
+  /// Fetches the newest normalized messages from Core.
   Future<List<CampusMessage>> fetchMessages({int limit = 100}) async {
     final payload = await _request('GET', '/v1/messages?limit=$limit');
     if (payload is! List) {
@@ -54,6 +58,7 @@ class CampusApi {
         .toList(growable: false);
   }
 
+  /// Fetches registered Connectors and their current availability.
   Future<List<ConnectorRegistration>> fetchConnectors() async {
     final payload = await _request('GET', '/v1/connectors');
     if (payload is! List) {
@@ -66,6 +71,7 @@ class CampusApi {
         .toList(growable: false);
   }
 
+  /// Fetches configured source instances, optionally including archived ones.
   Future<List<SourceInstance>> fetchSources({
     bool includeArchived = false,
   }) async {
@@ -83,6 +89,7 @@ class CampusApi {
         .toList(growable: false);
   }
 
+  /// Creates a source using configuration interpreted by its Connector.
   Future<SourceInstance> createSource({
     required String name,
     required String connectorId,
@@ -104,6 +111,7 @@ class CampusApi {
     return SourceInstance.fromJson(_requiredMap(payload, 'Create source'));
   }
 
+  /// Applies a partial update to an existing source.
   Future<SourceInstance> updateSource({
     required String sourceId,
     String? name,
@@ -125,10 +133,12 @@ class CampusApi {
     return SourceInstance.fromJson(_requiredMap(payload, 'Update source'));
   }
 
+  /// Archives a source while preserving its messages and configuration.
   Future<void> archiveSource(String sourceId) async {
     await _request('DELETE', '/v1/sources/${Uri.encodeComponent(sourceId)}');
   }
 
+  /// Restores an archived source in Core.
   Future<SourceInstance> restoreSource(String sourceId) async {
     final payload = await _request(
       'POST',
@@ -137,6 +147,7 @@ class CampusApi {
     return SourceInstance.fromJson(_requiredMap(payload, 'Restore source'));
   }
 
+  /// Checks Connector, configuration, and authentication without collecting.
   Future<SourceCheckData> checkSource(String sourceId) async {
     final payload = await _request(
       'POST',
@@ -145,6 +156,7 @@ class CampusApi {
     return SourceCheckData.fromJson(_requiredMap(payload, 'Check source'));
   }
 
+  /// Reads the Connector-owned authentication state for a source.
   Future<AuthResultData> fetchAuthStatus(String sourceId) async {
     final payload = await _request(
       'POST',
@@ -155,6 +167,7 @@ class CampusApi {
     );
   }
 
+  /// Starts a Connector-defined user-assisted authentication flow.
   Future<AuthResultData> beginAuth(String sourceId) async {
     final payload = await _request(
       'POST',
@@ -165,6 +178,7 @@ class CampusApi {
     );
   }
 
+  /// Submits dynamic challenge fields without interpreting provider details.
   Future<AuthResultData> submitAuthResponse({
     required String sourceId,
     required String challengeId,
@@ -180,6 +194,7 @@ class CampusApi {
     );
   }
 
+  /// Enqueues an incremental synchronization job for a source.
   Future<CampusJob> syncSource(String sourceId) async {
     final payload = await _request(
       'POST',
@@ -188,6 +203,7 @@ class CampusApi {
     return CampusJob.fromJson(_requiredMap(payload, 'Sync job'));
   }
 
+  /// Enqueues a non-persisting preview job for source configuration feedback.
   Future<CampusJob> previewSource(String sourceId) async {
     final payload = await _request(
       'POST',
@@ -196,6 +212,7 @@ class CampusApi {
     return CampusJob.fromJson(_requiredMap(payload, 'Preview job'));
   }
 
+  /// Fetches the latest durable job state from Core.
   Future<CampusJob> fetchJob(String jobId) async {
     final payload = await _request(
       'GET',
@@ -205,6 +222,7 @@ class CampusApi {
   }
 
   Future<Object?> _request(String method, String path, {JsonMap? body}) async {
+    // Centralizing transport and JSON handling keeps feature code protocol-free.
     final uri = Uri.parse('$_root$path');
     final headers = body == null
         ? const <String, String>{'accept': 'application/json'}
@@ -264,9 +282,11 @@ class CampusApi {
   static JsonMap _jsonMap(Map<dynamic, dynamic> value) =>
       value.map((key, item) => MapEntry(key.toString(), item));
 
+  /// Releases the underlying HTTP client.
   void close() => _client.close();
 }
 
+/// User-displayable failure raised for transport or Core protocol errors.
 class CampusApiException implements Exception {
   const CampusApiException(this.message, [this.responseBody, this.statusCode]);
 

@@ -1,3 +1,6 @@
+// Defines the client-side message model stored in the offline inbox.
+
+/// Normalized campus message plus device-local presentation state.
 class CampusMessage {
   const CampusMessage({
     required this.id,

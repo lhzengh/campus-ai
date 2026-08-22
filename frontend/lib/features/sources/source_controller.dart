@@ -1,3 +1,5 @@
+// Coordinates source CRUD, authentication, synchronization, and job state.
+
 import 'dart:async';
 
 import 'package:campus_ai_client/core/app_config.dart';
@@ -18,6 +20,7 @@ final sourceControllerProvider =
       AsyncValue<SourceManagementState>
     >((ref) => SourceController(ref.watch(sourceStoreProvider))..refresh());
 
+/// Immutable snapshot consumed by every source-management screen.
 class SourceManagementState {
   const SourceManagementState({
     required this.connectors,
@@ -33,6 +36,7 @@ class SourceManagementState {
   final Map<String, CampusJob> jobs;
   final bool showArchived;
 
+  /// Finds registration metadata without exposing list traversal to widgets.
   ConnectorRegistration? connector(String connectorId) {
     for (final connector in connectors) {
       if (connector.connectorId == connectorId) return connector;
@@ -55,12 +59,14 @@ class SourceManagementState {
   );
 }
 
+/// Owns user actions and keeps source, authentication, and job state coherent.
 class SourceController
     extends StateNotifier<AsyncValue<SourceManagementState>> {
   SourceController(this._store) : super(const AsyncLoading());
 
   final SourceStore _store;
 
+  /// Reloads Connectors and sources while retaining transient action results.
   Future<void> refresh() async {
     final previous = state.valueOrNull;
     if (previous == null) state = const AsyncLoading();
@@ -83,6 +89,7 @@ class SourceController
     }
   }
 
+  /// Creates a source and appends it to the current state.
   Future<SourceInstance> createSource({
     required String name,
     required String connectorId,
@@ -100,6 +107,7 @@ class SourceController
     return created;
   }
 
+  /// Updates a source and replaces its current in-memory representation.
   Future<SourceInstance> updateSource({
     required String sourceId,
     String? name,
@@ -118,6 +126,7 @@ class SourceController
     return updated;
   }
 
+  /// Switches archive visibility and reloads the matching source set.
   Future<void> setShowArchived(bool value) async {
     final current = state.requireValue;
     state = AsyncData(current.copyWith(showArchived: value));
@@ -132,6 +141,7 @@ class SourceController
     }
   }
 
+  /// Archives a source and updates the active filter view.
   Future<void> archiveSource(String sourceId) async {
     await _store.archiveSource(sourceId);
     final current = state.requireValue;
@@ -149,12 +159,14 @@ class SourceController
     );
   }
 
+  /// Restores a source and replaces its archived representation.
   Future<SourceInstance> restoreSource(String sourceId) async {
     final restored = await _store.restoreSource(sourceId);
     _replaceSource(restored);
     return restored;
   }
 
+  /// Checks source readiness and records the reported authentication state.
   Future<SourceCheckData> checkSource(String sourceId) async {
     final result = await _store.checkSource(sourceId);
     _recordAuth(
@@ -164,18 +176,21 @@ class SourceController
     return result;
   }
 
+  /// Refreshes Connector-owned authentication state.
   Future<AuthResultData> checkAuth(String sourceId) async {
     final result = await _store.fetchAuthStatus(sourceId);
     _recordAuth(sourceId, result);
     return result;
   }
 
+  /// Begins authentication and stores any returned challenge.
   Future<AuthResultData> beginAuth(String sourceId) async {
     final result = await _store.beginAuth(sourceId);
     _recordAuth(sourceId, result);
     return result;
   }
 
+  /// Submits challenge fields and records the resulting state.
   Future<AuthResultData> submitAuthResponse({
     required String sourceId,
     required String challengeId,
@@ -190,6 +205,7 @@ class SourceController
     return result;
   }
 
+  /// Starts synchronization and polls non-terminal jobs in the background.
   Future<CampusJob> syncSource(String sourceId) async {
     final job = await _store.syncSource(sourceId);
     _recordJob(sourceId, job);
@@ -197,6 +213,7 @@ class SourceController
     return job;
   }
 
+  /// Starts a preview and waits for a terminal result needed by its dialog.
   Future<CampusJob> previewSource(String sourceId) async {
     final job = await _store.previewSource(sourceId);
     _recordJob(sourceId, job);
@@ -249,6 +266,7 @@ class SourceController
     String jobId, {
     bool refreshWhenDone = false,
   }) async {
+    // Polling is deliberately bounded so a lost worker cannot spin forever.
     for (var attempt = 0; attempt < 60 && mounted; attempt++) {
       await Future<void>.delayed(const Duration(seconds: 1));
       if (!mounted) throw StateError('Source controller was disposed.');

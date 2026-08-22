@@ -1,3 +1,5 @@
+"""FastAPI adapter that exposes a Connector through the stable protocol."""
+
 from __future__ import annotations
 
 import secrets
@@ -30,6 +32,8 @@ def create_connector_app(connector: CampusConnector, *, shared_token: str = "") 
     )
 
     def authorize(authorization: str | None = Header(default=None)) -> None:
+        """Authenticate Core with a deployment-owned shared bearer token."""
+
         # Empty tokens are useful only for isolated tests; deployments provide one.
         if not shared_token:
             return
@@ -41,6 +45,8 @@ def create_connector_app(connector: CampusConnector, *, shared_token: str = "") 
 
     @app.exception_handler(ConnectorProtocolError)
     async def handle_protocol_error(_: Request, exc: ConnectorProtocolError) -> JSONResponse:
+        """Map typed Connector failures to stable HTTP responses."""
+
         # Preserve typed failures so Core never has to parse Connector log text.
         status_code = {
             "config_invalid": status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -60,27 +66,39 @@ def create_connector_app(connector: CampusConnector, *, shared_token: str = "") 
 
     @app.get("/health/live")
     def live() -> dict[str, str]:
+        """Report that the Connector process is running."""
+
         return {"status": "ok"}
 
     @app.get("/v1/manifest", response_model=ConnectorManifest, dependencies=protected)
     def manifest() -> ConnectorManifest:
+        """Return identity, capabilities, and configuration schema."""
+
         return connector.manifest
 
     @app.post("/v1/config/validate", response_model=ConfigValidationResult, dependencies=protected)
     def validate_config(payload: ConfigValidationRequest) -> ConfigValidationResult:
+        """Validate source-specific settings before Core stores them."""
+
         normalized = connector.validate_config(payload.config)
         return ConfigValidationResult(normalized_config=normalized)
 
     @app.post("/v1/auth/status", response_model=AuthResult, dependencies=protected)
     def auth_status(payload: AuthStatusRequest) -> AuthResult:
+        """Return the current authentication state for an instance."""
+
         return connector.auth_status(payload.instance_id, payload.config)
 
     @app.post("/v1/auth/begin", response_model=AuthResult, dependencies=protected)
     def begin_auth(payload: BeginAuthRequest) -> AuthResult:
+        """Begin a provider-neutral authentication challenge."""
+
         return connector.begin_auth(payload.instance_id, payload.config)
 
     @app.post("/v1/auth/respond", response_model=AuthResult, dependencies=protected)
     def submit_auth_response(payload: SubmitAuthRequest) -> AuthResult:
+        """Forward a user response to the owning Connector."""
+
         return connector.submit_auth_response(
             payload.instance_id,
             payload.config,
@@ -90,6 +108,8 @@ def create_connector_app(connector: CampusConnector, *, shared_token: str = "") 
 
     @app.post("/v1/sync", response_model=CampusItemBatch, dependencies=protected)
     def sync(payload: SyncRequest) -> CampusItemBatch:
+        """Collect one normalized, cursor-aware content batch."""
+
         return connector.sync(payload)
 
     return app

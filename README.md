@@ -110,7 +110,7 @@ The Flutter application is installed directly on each client device and is not p
 | Compose startup | Passed from a clean PostgreSQL 18 volume |
 | Persistent job queue | Enqueue, consume, deduplicate, and container-recreation persistence passed |
 | Playwright Connector | Independent image built successfully; Chromium launched and rendered a page |
-| Flutter analysis and tests | Clean analysis, 12 tests passing, including source editing, scheduling, archival recovery, dynamic forms, auth challenges, and optional Chinese presentation strings |
+| Flutter analysis and tests | Clean analysis, 13 tests passing, including hierarchical navigation, direct-link recovery, source editing, scheduling, archival recovery, dynamic forms, auth challenges, and optional Chinese presentation strings |
 | Linux client | Debug bundle built successfully |
 | Android client | Project generated; blocked locally on Android SDK and Firebase/device setup |
 | Windows client | Project generated; build validation awaits a Windows runner |

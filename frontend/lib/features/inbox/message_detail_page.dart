@@ -41,7 +41,7 @@ class _MessageDetailPageState extends ConsumerState<MessageDetailPage> {
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
-                onPressed: context.pop,
+                onPressed: () => _backToInbox(context),
                 icon: const Icon(Icons.arrow_back),
                 label: Text(context.strings.backToInbox),
               ),
@@ -85,5 +85,14 @@ class _MessageDetailPageState extends ConsumerState<MessageDetailPage> {
         );
       },
     );
+  }
+
+  void _backToInbox(BuildContext context) {
+    // Direct links have no parent route to pop, so always keep a safe fallback.
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/');
+    }
   }
 }

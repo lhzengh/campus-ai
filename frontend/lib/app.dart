@@ -15,35 +15,118 @@ final appRouter = GoRouter(
     ShellRoute(
       builder: (context, state, child) => AppShell(child: child),
       routes: [
-        GoRoute(path: '/', builder: (context, state) => const InboxPage()),
+        GoRoute(
+          path: '/',
+          pageBuilder: (context, state) =>
+              _topLevelPage(state: state, child: const InboxPage()),
+        ),
         GoRoute(
           path: '/messages/:id',
-          builder: (context, state) =>
-              MessageDetailPage(messageId: state.pathParameters['id']!),
+          pageBuilder: (context, state) => _detailPage(
+            state: state,
+            child: MessageDetailPage(messageId: state.pathParameters['id']!),
+          ),
         ),
         GoRoute(
           path: '/sources',
-          builder: (context, state) => const SourcePage(),
+          pageBuilder: (context, state) =>
+              _topLevelPage(state: state, child: const SourcePage()),
         ),
         GoRoute(
           path: '/sources/new/:connectorId',
-          builder: (context, state) => SourceCreatePage(
-            connectorId: state.pathParameters['connectorId']!,
+          pageBuilder: (context, state) => _detailPage(
+            state: state,
+            child: SourceCreatePage(
+              connectorId: state.pathParameters['connectorId']!,
+            ),
           ),
         ),
         GoRoute(
           path: '/sources/:sourceId/edit',
-          builder: (context, state) =>
-              SourceCreatePage(sourceId: state.pathParameters['sourceId']!),
+          pageBuilder: (context, state) => _detailPage(
+            state: state,
+            child: SourceCreatePage(
+              sourceId: state.pathParameters['sourceId']!,
+            ),
+          ),
         ),
         GoRoute(
           path: '/settings',
-          builder: (context, state) => const SettingsPage(),
+          pageBuilder: (context, state) =>
+              _topLevelPage(state: state, child: const SettingsPage()),
         ),
       ],
     ),
   ],
 );
+
+const _forwardTransitionDuration = Duration(milliseconds: 280);
+const _reverseTransitionDuration = Duration(milliseconds: 240);
+
+/// Keeps primary destinations stable while a deeper page pushes them aside.
+CustomTransitionPage<void> _topLevelPage({
+  required GoRouterState state,
+  required Widget child,
+}) => CustomTransitionPage<void>(
+  key: state.pageKey,
+  transitionDuration: _forwardTransitionDuration,
+  reverseTransitionDuration: _reverseTransitionDuration,
+  child: _RouteSurface(child: child),
+  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+    return SlideTransition(
+      position: _outgoingSlide(secondaryAnimation),
+      child: child,
+    );
+  },
+);
+
+/// Slides detail and editing pages in from the trailing edge of their parent.
+CustomTransitionPage<void> _detailPage({
+  required GoRouterState state,
+  required Widget child,
+}) => CustomTransitionPage<void>(
+  key: state.pageKey,
+  transitionDuration: _forwardTransitionDuration,
+  reverseTransitionDuration: _reverseTransitionDuration,
+  child: _RouteSurface(child: child),
+  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+    return SlideTransition(
+      position: _outgoingSlide(secondaryAnimation),
+      child: SlideTransition(position: _incomingSlide(animation), child: child),
+    );
+  },
+);
+
+Animation<Offset> _incomingSlide(Animation<double> animation) =>
+    Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(
+      CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      ),
+    );
+
+Animation<Offset> _outgoingSlide(Animation<double> animation) =>
+    Tween<Offset>(begin: Offset.zero, end: const Offset(-1, 0)).animate(
+      CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      ),
+    );
+
+/// Paints an opaque surface so the previous route cannot bleed through.
+class _RouteSurface extends StatelessWidget {
+  const _RouteSurface({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: Theme.of(context).scaffoldBackgroundColor,
+    child: child,
+  );
+}
 
 class CampusAiApp extends ConsumerWidget {
   const CampusAiApp({super.key});

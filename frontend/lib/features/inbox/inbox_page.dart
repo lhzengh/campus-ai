@@ -93,7 +93,8 @@ class _MessageCard extends StatelessWidget {
           ),
         ),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () => context.go('/messages/${message.id}'),
+        // Detail is a child destination, so preserve the inbox on the stack.
+        onTap: () => context.push('/messages/${message.id}'),
       ),
     );
   }

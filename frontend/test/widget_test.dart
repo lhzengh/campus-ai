@@ -37,6 +37,43 @@ void main() {
     expect(find.text('Original content'), findsOneWidget);
     expect(find.text('请在本周五前完成确认。'), findsOneWidget);
     expect(store.readIds, contains('message-1'));
+
+    await tester.tap(find.text('Back to inbox'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Campus inbox'), findsOneWidget);
+    expect(find.text('Original content'), findsNothing);
+  });
+
+  testWidgets('back to inbox also works for a direct detail link', (
+    tester,
+  ) async {
+    appRouter.go('/messages/message-1');
+    final store = _FakeMessageStore([
+      CampusMessage(
+        id: 'message-1',
+        sourceId: 'source-1',
+        url: 'https://example.edu/notice/1',
+        title: 'Direct message',
+        body: 'Opened from a direct link.',
+        fetchedAt: DateTime(2026, 8, 22, 9),
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [messageStoreProvider.overrideWithValue(store)],
+        child: const CampusAiApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Original content'), findsOneWidget);
+    await tester.tap(find.text('Back to inbox'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Campus inbox'), findsOneWidget);
+    expect(find.text('Original content'), findsNothing);
   });
 }
 

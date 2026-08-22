@@ -91,7 +91,7 @@ class SourcePage extends ConsumerWidget {
       builder: (context) => _ConnectorPicker(connectors: state.connectors),
     );
     if (selected != null && context.mounted) {
-      context.go('/sources/new/${Uri.encodeComponent(selected)}');
+      context.push('/sources/new/${Uri.encodeComponent(selected)}');
     }
   }
 }
@@ -358,7 +358,7 @@ class _SourceCard extends ConsumerWidget {
     String value,
   ) async {
     if (value == 'edit') {
-      context.go('/sources/${Uri.encodeComponent(source.id)}/edit');
+      context.push('/sources/${Uri.encodeComponent(source.id)}/edit');
       return;
     }
     if (value != 'archive') return;

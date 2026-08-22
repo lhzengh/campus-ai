@@ -99,7 +99,7 @@ class _SourceCreatePageState extends ConsumerState<SourceCreatePage> {
           Text(context.strings.sourceNotFound),
           const SizedBox(height: 16),
           OutlinedButton(
-            onPressed: () => context.go('/sources'),
+            onPressed: () => _backToSources(context),
             child: Text(context.strings.sources),
           ),
         ],
@@ -118,7 +118,7 @@ class _SourceCreatePageState extends ConsumerState<SourceCreatePage> {
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(
-            onPressed: _submitting ? null : () => context.go('/sources'),
+            onPressed: _submitting ? null : () => _backToSources(context),
             icon: const Icon(Icons.arrow_back),
             label: Text(context.strings.sources),
           ),
@@ -307,7 +307,7 @@ class _SourceCreatePageState extends ConsumerState<SourceCreatePage> {
           ),
         ),
       );
-      context.go('/sources');
+      _backToSources(context);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -327,6 +327,15 @@ class _SourceCreatePageState extends ConsumerState<SourceCreatePage> {
 
   static String _formatTime(TimeOfDay value) =>
       '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+
+  void _backToSources(BuildContext context) {
+    // A directly opened create/edit URL has no parent entry to pop.
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/sources');
+    }
+  }
 }
 
 class _LoadError extends StatelessWidget {

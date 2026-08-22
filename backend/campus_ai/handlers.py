@@ -1,3 +1,5 @@
+"""Implement worker-side collection, persistence, and analysis workflows."""
+
 from __future__ import annotations
 
 import hashlib
@@ -100,6 +102,8 @@ def _persist_message(
 
 
 def handle_fetch_all(session: Session, payload: dict[str, Any]) -> JobResult:
+    """Fan out one run into per-source jobs while skipping blocked auth states."""
+
     run_key = str(payload.get("run_key") or date.today().isoformat())
     # Authentication-blocked sources stay paused until the user completes a challenge.
     sources = session.scalars(
@@ -234,6 +238,8 @@ def handle_browser_fetch(session: Session, payload: dict[str, Any]) -> JobResult
 
 
 def handle_analyze_message(session: Session, payload: dict[str, Any]) -> JobResult:
+    """Persist one versioned cloud analysis without modifying source facts."""
+
     settings = get_settings()
     message = session.get(Message, str(payload["message_id"]))
     if message is None:

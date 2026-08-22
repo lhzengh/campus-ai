@@ -1,3 +1,5 @@
+// Stores the offline inbox and exposes reactive Drift queries to the UI.
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -9,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 
 part 'app_database.g.dart';
 
+/// Persistent representation of normalized messages received from Core.
 class CachedMessages extends Table {
   TextColumn get id => text()();
   TextColumn get sourceId => text()();
@@ -24,6 +27,7 @@ class CachedMessages extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
+/// Local cache that remains the UI's source of truth between network refreshes.
 @DriftDatabase(tables: [CachedMessages])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
@@ -31,6 +35,7 @@ class AppDatabase extends _$AppDatabase {
   @override
   int get schemaVersion => 1;
 
+  /// Watches the inbox ordered by source time and then fetch time.
   Stream<List<CampusMessage>> watchMessages() {
     final query = select(cachedMessages)
       ..orderBy([
@@ -44,6 +49,7 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// Watches one cached message so detail state stays reactive.
   Stream<CampusMessage?> watchMessage(String id) {
     final query = select(cachedMessages)..where((row) => row.id.equals(id));
     return query.watchSingleOrNull().map(
@@ -51,7 +57,9 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// Inserts or refreshes messages without losing device-local read state.
   Future<void> upsertMessages(Iterable<CampusMessage> messages) async {
+    // Server refreshes must not reset read state that exists only on this device.
     final readRows = await (select(
       cachedMessages,
     )..where((row) => row.isRead.equals(true))).get();
@@ -78,6 +86,7 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// Marks a cached message as read on this device.
   Future<void> markRead(String id) {
     return (update(cachedMessages)..where((row) => row.id.equals(id))).write(
       const CachedMessagesCompanion(isRead: Value(true)),
@@ -109,6 +118,7 @@ class AppDatabase extends _$AppDatabase {
 }
 
 LazyDatabase _openConnection() {
+  // Drift opens SQLite in a background isolate to keep scrolling responsive.
   return LazyDatabase(() async {
     final directory = await getApplicationSupportDirectory();
     final file = File(p.join(directory.path, 'campus_ai.sqlite'));

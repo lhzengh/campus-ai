@@ -1,3 +1,5 @@
+"""Resolve deployment-configured Connector IDs into validated clients."""
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -17,9 +19,13 @@ class ConnectorEndpointRegistry:
         self.shared_token = shared_token
 
     def connector_ids(self) -> list[str]:
+        """Return stable Connector IDs in deterministic discovery order."""
+
         return sorted(self.endpoints)
 
     def get(self, connector_id: str, *, expected_version: str | None = None) -> ConnectorClient:
+        """Create a client pinned to the registered ID and optional version."""
+
         try:
             endpoint = self.endpoints[connector_id]
         except KeyError as exc:
@@ -34,6 +40,8 @@ class ConnectorEndpointRegistry:
 
 @lru_cache
 def get_connector_registry() -> ConnectorEndpointRegistry:
+    """Build one process-local registry from runtime deployment settings."""
+
     # Connector locations belong to deployment configuration, never source rows.
     settings = get_settings()
     return ConnectorEndpointRegistry(

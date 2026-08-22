@@ -1,3 +1,6 @@
+// Defines client-side models for Connectors, sources, authentication, and jobs.
+
+/// JSON object shape shared by the source-management data layer.
 typedef JsonMap = Map<String, Object?>;
 
 /// A user-facing collection schedule that remains independent of Flutter UI types.
@@ -189,6 +192,7 @@ class SourceCheckData {
   );
 }
 
+/// One dynamic input requested by a Connector authentication challenge.
 class AuthChallengeFieldData {
   const AuthChallengeFieldData({
     required this.name,
@@ -214,6 +218,7 @@ class AuthChallengeFieldData {
       );
 }
 
+/// Provider-neutral authentication challenge rendered by the client.
 class AuthChallengeData {
   const AuthChallengeData({
     required this.challengeId,
@@ -250,6 +255,7 @@ class AuthChallengeData {
   );
 }
 
+/// Current source authentication state and optional active challenge.
 class AuthResultData {
   const AuthResultData({
     required this.state,
@@ -273,6 +279,7 @@ class AuthResultData {
   }
 }
 
+/// Asynchronous Core job status used for sync and preview feedback.
 class CampusJob {
   const CampusJob({
     required this.id,

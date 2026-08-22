@@ -1,3 +1,5 @@
+"""ASGI application for the generic static-site Connector process."""
+
 from __future__ import annotations
 
 import os

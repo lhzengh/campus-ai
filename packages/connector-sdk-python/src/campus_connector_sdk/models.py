@@ -1,3 +1,5 @@
+"""Versioned, provider-neutral data contract shared by Core and Connectors."""
+
 from __future__ import annotations
 
 import json
@@ -15,6 +17,8 @@ CONTRACT_VERSION = "1.0"
 
 # Capabilities let Core discover optional behavior without importing Connector code.
 class ConnectorCapability(StrEnum):
+    """Optional behaviors advertised by a Connector manifest."""
+
     SYNC = "sync"
     INCREMENTAL_SYNC = "incremental_sync"
     ATTACHMENTS = "attachments"
@@ -23,6 +27,8 @@ class ConnectorCapability(StrEnum):
 
 
 class AuthState(StrEnum):
+    """Portable authentication state understood by Core and clients."""
+
     NOT_REQUIRED = "not_required"
     AUTH_REQUIRED = "auth_required"
     WAITING_FOR_USER = "waiting_for_user"
@@ -31,6 +37,8 @@ class AuthState(StrEnum):
 
 
 class AuthChallengeKind(StrEnum):
+    """User interactions that a client may need to render."""
+
     USERNAME_PASSWORD = "username_password"
     SMS_CODE = "sms_code"
     QR_SCAN = "qr_scan"
@@ -40,6 +48,8 @@ class AuthChallengeKind(StrEnum):
 
 
 class ConnectorErrorCode(StrEnum):
+    """Stable failure categories that Core can handle without log parsing."""
+
     CONFIG_INVALID = "config_invalid"
     AUTH_REQUIRED = "auth_required"
     ACCESS_DENIED = "access_denied"
@@ -51,6 +61,8 @@ class ConnectorErrorCode(StrEnum):
 
 
 class CampusItemType(StrEnum):
+    """Broad content categories used consistently across institutions."""
+
     ANNOUNCEMENT = "announcement"
     NEWS = "news"
     EVENT = "event"
@@ -59,6 +71,8 @@ class CampusItemType(StrEnum):
 
 
 class AttachmentAccessMode(StrEnum):
+    """How Core may retrieve an attachment without learning source secrets."""
+
     PUBLIC_URL = "public_url"
     CONNECTOR_FETCH = "connector_fetch"
 
@@ -78,22 +92,30 @@ class ConnectorManifest(BaseModel):
     @field_validator("config_schema")
     @classmethod
     def validate_schema_shape(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Require a top-level object so clients can render named fields."""
+
         if value.get("type") != "object":
             raise ValueError("Connector config_schema must describe a JSON object")
         return value
 
 
 class ConfigValidationRequest(BaseModel):
+    """Raw instance configuration submitted for Connector validation."""
+
     config: dict[str, Any] = Field(default_factory=dict)
 
 
 class ConfigValidationResult(BaseModel):
+    """Normalized configuration or field-level validation failures."""
+
     valid: bool = True
     normalized_config: dict[str, Any] = Field(default_factory=dict)
     errors: dict[str, str] = Field(default_factory=dict)
 
 
 class AuthChallengeField(BaseModel):
+    """One provider-neutral input requested during assisted authentication."""
+
     name: str
     label: str
     input_type: str = "text"
@@ -114,21 +136,29 @@ class AuthChallenge(BaseModel):
 
 
 class AuthResult(BaseModel):
+    """Current authentication state plus an optional user challenge."""
+
     state: AuthState
     challenge: AuthChallenge | None = None
     message: str = ""
 
 
 class AuthStatusRequest(BaseModel):
+    """Instance context required to evaluate authentication readiness."""
+
     instance_id: str = Field(min_length=1)
     config: dict[str, Any] = Field(default_factory=dict)
 
 
 class BeginAuthRequest(AuthStatusRequest):
+    """Request to start authentication for a configured instance."""
+
     pass
 
 
 class SubmitAuthRequest(AuthStatusRequest):
+    """User response submitted for an active authentication challenge."""
+
     challenge_id: str = Field(min_length=1)
     response: dict[str, str] = Field(default_factory=dict)
 
@@ -172,6 +202,8 @@ class AttachmentAccess(BaseModel):
 
     @model_validator(mode="after")
     def validate_mode_fields(self) -> AttachmentAccess:
+        """Require exactly the locator used by the selected access mode."""
+
         if self.mode is AttachmentAccessMode.PUBLIC_URL:
             if not self.url or self.ref is not None:
                 raise ValueError("public_url access requires url and forbids ref")
@@ -182,6 +214,8 @@ class AttachmentAccess(BaseModel):
 
 
 class CampusAttachment(BaseModel):
+    """Normalized attachment metadata with an explicit access strategy."""
+
     external_id: str | None = Field(default=None, max_length=500)
     name: str = Field(min_length=1, max_length=1_000)
     media_type: str | None = Field(default=None, max_length=255)
@@ -208,11 +242,15 @@ class CampusItem(BaseModel):
     @field_validator("source_url")
     @classmethod
     def validate_source_url(cls, value: str) -> str:
+        """Accept only absolute credential-free source URLs."""
+
         return _absolute_http_url(value, field_name="source_url")
 
     @field_validator("published_at", "updated_at")
     @classmethod
     def require_timestamp_offset(cls, value: datetime | None) -> datetime | None:
+        """Reject ambiguous source timestamps without timezone offsets."""
+
         if value is not None and value.utcoffset() is None:
             raise ValueError("source timestamps must include an explicit UTC offset")
         return value
@@ -220,6 +258,8 @@ class CampusItem(BaseModel):
     @field_validator("extensions")
     @classmethod
     def validate_extensions(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Namespace and bound Connector-owned extension data."""
+
         connector_id = re.compile(r"^[a-z0-9]+(?:[._-][a-z0-9]+)+$")
         if any(connector_id.fullmatch(key) is None for key in value):
             raise ValueError("extensions keys must be stable Connector IDs")
@@ -237,6 +277,8 @@ class SyncWarning(BaseModel):
     @field_validator("details")
     @classmethod
     def validate_details(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Bound warning details before they cross process boundaries."""
+
         return _bounded_json(value, field_name="warning details")
 
 
@@ -262,10 +304,14 @@ class CampusItemBatch(BaseModel):
     @field_validator("next_cursor")
     @classmethod
     def validate_cursor(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Keep opaque incremental state bounded and serializable."""
+
         return _bounded_json(value, field_name="next_cursor")
 
     @model_validator(mode="after")
     def require_pagination_cursor(self) -> CampusItemBatch:
+        """Ensure Core can make progress whenever more items are advertised."""
+
         if self.has_more and not self.next_cursor:
             raise ValueError("has_more requires a non-empty next_cursor")
         return self
@@ -278,6 +324,8 @@ SyncBatch = CampusItemBatch
 
 
 class ConnectorErrorBody(BaseModel):
+    """Serializable error envelope returned by a Connector service."""
+
     code: ConnectorErrorCode
     message: str
     retryable: bool = False

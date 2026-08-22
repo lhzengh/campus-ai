@@ -1,3 +1,5 @@
+"""ASGI application for the authenticated-browser Connector process."""
+
 from __future__ import annotations
 
 import os

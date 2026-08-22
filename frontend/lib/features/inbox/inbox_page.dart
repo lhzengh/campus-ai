@@ -1,3 +1,5 @@
+// Presents the reactive offline inbox and its loading, empty, and error states.
+
 import 'package:campus_ai_client/core/app_localizations.dart';
 import 'package:campus_ai_client/data/campus_message.dart';
 import 'package:campus_ai_client/features/inbox/inbox_controller.dart';
@@ -5,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+/// Primary destination showing locally cached campus messages.
 class InboxPage extends ConsumerStatefulWidget {
   const InboxPage({super.key});
 

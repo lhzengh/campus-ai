@@ -1,3 +1,5 @@
+"""Public cloud-analysis provider interfaces and implementations."""
+
 from campus_ai.ai.base import AIProvider
 from campus_ai.ai.openai_compatible import OpenAICompatibleProvider
 

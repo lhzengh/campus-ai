@@ -1,3 +1,5 @@
+"""Typed errors that cross the Connector HTTP boundary."""
+
 from __future__ import annotations
 
 from typing import Any

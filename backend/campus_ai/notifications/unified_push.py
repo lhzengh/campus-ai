@@ -1,3 +1,5 @@
+"""Deliver self-hostable push messages to UnifiedPush distributor endpoints."""
+
 from __future__ import annotations
 
 import json
@@ -16,6 +18,8 @@ class UnifiedPushNotificationChannel(NotificationChannel):
         self.client = client or httpx.Client(timeout=httpx.Timeout(20))
 
     def send(self, *, endpoint: str, event: NotificationEvent) -> NotificationResult:
+        """Post the neutral event payload directly to a device endpoint."""
+
         payload = {
             "event_key": event.event_key,
             "title": event.title,

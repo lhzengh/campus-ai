@@ -1,16 +1,25 @@
+// Adapts the Core API to a replaceable source-management data boundary.
+
 import 'package:campus_ai_client/data/campus_api.dart';
 import 'package:campus_ai_client/data/source_models.dart';
 
 /// Testable boundary between the source-management UI and the Client API.
 abstract interface class SourceStore {
+  /// Loads Connector registrations known to Core.
   Future<List<ConnectorRegistration>> fetchConnectors();
+
+  /// Loads source instances with an optional archive view.
   Future<List<SourceInstance>> fetchSources({bool includeArchived = false});
+
+  /// Creates a configured source instance.
   Future<SourceInstance> createSource({
     required String name,
     required String connectorId,
     required JsonMap config,
     required SourceScheduleData schedule,
   });
+
+  /// Applies editable source fields without changing Connector identity.
   Future<SourceInstance> updateSource({
     required String sourceId,
     String? name,
@@ -18,22 +27,43 @@ abstract interface class SourceStore {
     bool? enabled,
     SourceScheduleData? schedule,
   });
+
+  /// Archives a source while retaining its history.
   Future<void> archiveSource(String sourceId);
+
+  /// Restores a previously archived source.
   Future<SourceInstance> restoreSource(String sourceId);
+
+  /// Checks source readiness without collecting content.
   Future<SourceCheckData> checkSource(String sourceId);
+
+  /// Loads the current Connector-owned authentication state.
   Future<AuthResultData> fetchAuthStatus(String sourceId);
+
+  /// Begins user-assisted authentication when supported.
   Future<AuthResultData> beginAuth(String sourceId);
+
+  /// Submits a response to the active authentication challenge.
   Future<AuthResultData> submitAuthResponse({
     required String sourceId,
     required String challengeId,
     required Map<String, String> response,
   });
+
+  /// Enqueues an incremental source synchronization.
   Future<CampusJob> syncSource(String sourceId);
+
+  /// Enqueues a non-persisting source preview.
   Future<CampusJob> previewSource(String sourceId);
+
+  /// Loads the latest durable job state.
   Future<CampusJob> fetchJob(String jobId);
+
+  /// Releases resources owned by the store.
   void close();
 }
 
+/// Production SourceStore backed by the Core HTTP API.
 class ApiSourceStore implements SourceStore {
   ApiSourceStore(this._api);
 

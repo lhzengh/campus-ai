@@ -1,3 +1,5 @@
+// Presents one cached message and links back to its original source page.
+
 import 'package:campus_ai_client/core/app_localizations.dart';
 import 'package:campus_ai_client/features/inbox/inbox_controller.dart';
 import 'package:flutter/material.dart';
@@ -5,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+/// Detail route for a normalized campus message.
 class MessageDetailPage extends ConsumerStatefulWidget {
   const MessageDetailPage({required this.messageId, super.key});
 

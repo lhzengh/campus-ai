@@ -1,3 +1,5 @@
+"""Encrypted Playwright storage-state lifecycle owned by the Connector."""
+
 from __future__ import annotations
 
 import hashlib
@@ -23,11 +25,15 @@ class EncryptedBrowserSession:
         self.cipher = Fernet(secret_key.encode("ascii"))
 
     def state_path(self, instance_id: str) -> Path:
+        """Derive a safe opaque file name for one source instance."""
+
         # Hash untrusted IDs so they can never select an arbitrary filesystem path.
         digest = hashlib.sha256(instance_id.encode("utf-8")).hexdigest()
         return self.session_directory / f"{digest}.enc"
 
     def has_state(self, instance_id: str) -> bool:
+        """Return whether an encrypted session has been captured."""
+
         return self.state_path(instance_id).is_file()
 
     def _decrypt_state(self, instance_id: str, temporary_path: Path) -> bool:
@@ -57,6 +63,8 @@ class EncryptedBrowserSession:
         """Block browser subrequests that escape the configured source boundary."""
 
         def route_request(route: Route) -> None:
+            """Apply the allowlist to each browser subrequest."""
+
             parsed = urlsplit(route.request.url)
             host = (parsed.hostname or "").lower().rstrip(".")
             if parsed.scheme in {"data", "blob"} or host in allowed_hosts:
@@ -67,6 +75,8 @@ class EncryptedBrowserSession:
         return route_request
 
     def open_authenticated_page(self, instance_id: str, url: str, *, allowed_hosts: set[str]) -> str:
+        """Render an allowlisted page and persist refreshed encrypted state."""
+
         temporary = tempfile.NamedTemporaryFile(prefix="campus-connector-session-", suffix=".json", delete=False)
         temporary_path = Path(temporary.name)
         temporary.close()

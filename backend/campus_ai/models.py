@@ -1,3 +1,5 @@
+"""Define Core-owned persistence models and their database invariants."""
+
 from __future__ import annotations
 
 import enum
@@ -12,10 +14,14 @@ from campus_ai.db import Base
 
 
 def utcnow() -> datetime:
+    """Return an aware UTC timestamp for consistent persisted defaults."""
+
     return datetime.now(timezone.utc)
 
 
 class JobStatus(str, enum.Enum):
+    """Durable lifecycle states shared by producers, workers, and clients."""
+
     pending = "pending"
     running = "running"
     succeeded = "succeeded"
@@ -23,6 +29,8 @@ class JobStatus(str, enum.Enum):
 
 
 class Source(Base):
+    """A user-configured Connector instance and its collection state."""
+
     __tablename__ = "sources"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -56,6 +64,8 @@ class Source(Base):
 
 
 class Message(Base):
+    """One canonical source item, unique within its owning source."""
+
     __tablename__ = "messages"
     __table_args__ = (
         UniqueConstraint("source_id", "external_id", name="uq_message_source_external"),
@@ -82,6 +92,8 @@ class Message(Base):
 
 
 class Analysis(Base):
+    """A versioned AI interpretation that never replaces source facts."""
+
     __tablename__ = "analyses"
     __table_args__ = (UniqueConstraint("message_id", "provider", "model", "prompt_version", name="uq_analysis_version"),)
 
@@ -97,6 +109,8 @@ class Analysis(Base):
 
 
 class Job(Base):
+    """A durable unit of asynchronous work with retry diagnostics."""
+
     __tablename__ = "jobs"
     __table_args__ = (
         UniqueConstraint("dedupe_key", name="uq_job_dedupe_key"),
@@ -136,6 +150,8 @@ class Job(Base):
 
 
 class NotificationDelivery(Base):
+    """An idempotency record for one channel, device, and logical event."""
+
     __tablename__ = "notification_deliveries"
     __table_args__ = (UniqueConstraint("channel", "device_id", "event_key", name="uq_notification_delivery"),)
 

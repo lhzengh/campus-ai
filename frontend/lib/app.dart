@@ -1,3 +1,5 @@
+// Defines application routing, Material themes, localization, and navigation.
+
 import 'package:campus_ai_client/core/app_localizations.dart';
 import 'package:campus_ai_client/features/inbox/inbox_page.dart';
 import 'package:campus_ai_client/features/inbox/message_detail_page.dart';
@@ -128,6 +130,7 @@ class _RouteSurface extends StatelessWidget {
   );
 }
 
+/// Root Material application shared by desktop and Android builds.
 class CampusAiApp extends ConsumerWidget {
   const CampusAiApp({super.key});
 
@@ -172,6 +175,7 @@ class CampusAiApp extends ConsumerWidget {
   }
 }
 
+/// Responsive top-level navigation shell for the primary destinations.
 class AppShell extends StatelessWidget {
   const AppShell({required this.child, super.key});
 

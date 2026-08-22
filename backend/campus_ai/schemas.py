@@ -1,3 +1,5 @@
+"""Declare validated Client API requests and response views."""
+
 from __future__ import annotations
 
 from datetime import datetime, time as dt_time
@@ -9,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Deadline(BaseModel):
+    """A source-supported deadline extracted by the analysis provider."""
+
     time: datetime | None = None
     timezone: str = "Asia/Shanghai"
     all_day: bool = False
@@ -17,6 +21,8 @@ class Deadline(BaseModel):
 
 
 class AnalysisResult(BaseModel):
+    """Structured AI output consumed by ranking and notification policies."""
+
     category: str
     summary_short: str
     summary_detail: str
@@ -32,6 +38,8 @@ class AnalysisResult(BaseModel):
 
 
 class JobCreate(BaseModel):
+    """Internal request for enqueueing a deduplicated asynchronous job."""
+
     kind: str
     payload: dict[str, Any] = Field(default_factory=dict)
     dedupe_key: str
@@ -39,6 +47,8 @@ class JobCreate(BaseModel):
 
 
 class JobView(BaseModel):
+    """Client-safe job status and structured execution diagnostics."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -57,6 +67,8 @@ class JobView(BaseModel):
 
 
 class MessageView(BaseModel):
+    """Canonical message facts exposed without ORM implementation details."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -76,6 +88,8 @@ class MessageView(BaseModel):
 
 
 class SourceSchedule(BaseModel):
+    """A manual or daily source schedule expressed in an IANA timezone."""
+
     model_config = ConfigDict(extra="forbid")
 
     mode: Literal["manual", "daily"] = "daily"
@@ -95,6 +109,8 @@ class SourceSchedule(BaseModel):
 
 
 class SourceCreate(BaseModel):
+    """Request for creating one runtime-configured Connector instance."""
+
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=200)
@@ -105,6 +121,8 @@ class SourceCreate(BaseModel):
 
 
 class SourceUpdate(BaseModel):
+    """Partial update for mutable source metadata and collection policy."""
+
     model_config = ConfigDict(extra="forbid")
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
@@ -114,6 +132,8 @@ class SourceUpdate(BaseModel):
 
 
 class SourceView(BaseModel):
+    """Client-facing source configuration, lifecycle, and diagnostic state."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -134,11 +154,15 @@ class SourceView(BaseModel):
 
 
 class SourceAuthResponse(BaseModel):
+    """Ephemeral user input for a Connector-owned authentication challenge."""
+
     challenge_id: str = Field(min_length=1)
     response: dict[str, str] = Field(default_factory=dict)
 
 
 class SourceCheckResult(BaseModel):
+    """Non-collecting validation result for Connector, config, and auth state."""
+
     connector_status: Literal["available"]
     config_status: Literal["valid"]
     auth_status: str
@@ -146,6 +170,8 @@ class SourceCheckResult(BaseModel):
 
 
 class ConnectorRegistrationView(BaseModel):
+    """Availability and manifest data for one runtime-registered Connector."""
+
     connector_id: str
     status: Literal["available", "unavailable", "incompatible"]
     manifest: ConnectorManifest | None = None

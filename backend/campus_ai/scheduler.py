@@ -1,3 +1,5 @@
+"""Translate due source schedules into deduplicated durable jobs."""
+
 from __future__ import annotations
 
 import logging
@@ -33,6 +35,7 @@ def process_due_sources(session: Session, *, now: datetime | None = None) -> dic
     initialized = 0
     for source in sources:
         if source.next_run_at is None:
+            # New or migrated sources start at their next future slot, not immediately.
             source.next_run_at = next_daily_run(
                 source.schedule_time,
                 source.schedule_timezone,
@@ -74,6 +77,8 @@ def enqueue_due_sources() -> None:
 
 
 def run() -> None:
+    """Start the single-process timer that performs short database scans."""
+
     settings = get_settings()
     scheduler = BlockingScheduler(timezone=settings.timezone)
     scheduler.add_job(

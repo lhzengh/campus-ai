@@ -1,3 +1,5 @@
+"""Consume durable Core jobs and dispatch them to registered handlers."""
+
 from __future__ import annotations
 
 import logging
@@ -14,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 def run_forever() -> None:
+    """Poll the durable queue while recovering work abandoned by dead workers."""
+
     settings = get_settings()
     logger.info("worker_started kinds=%s", settings.enabled_job_kinds or "all")
     while True:
@@ -26,6 +30,7 @@ def run_forever() -> None:
                 time.sleep(settings.worker_poll_seconds)
                 continue
             try:
+                # Handler failures stay inside the job lifecycle instead of killing the worker.
                 handler = HANDLERS[job.kind]
                 result = handler(session, job.payload)
             except Exception as exc:

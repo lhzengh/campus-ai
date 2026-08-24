@@ -245,3 +245,7 @@ Immediate next steps are to validate a runtime-configured portal flow with the u
 - [Authenticated portal integration profile](docs/sources/authenticated-portal.md)
 - [Phase 0 validation report](docs/validation/phase-0-report.md)
 - [FCM device validation guide](docs/validation/fcm-device-test.md)
+
+## License
+
+Campus AI is licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for attribution information.

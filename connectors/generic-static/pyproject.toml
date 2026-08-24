@@ -1,11 +1,12 @@
 [build-system]
-requires = ["setuptools>=75"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "campus-ai-connector-generic-static"
 version = "0.1.0"
 description = "Configurable static HTTP Connector for Campus AI"
+license = "Apache-2.0"
 requires-python = ">=3.11,<3.15"
 dependencies = [
   "campus-ai-connector-sdk>=0.1,<0.2",

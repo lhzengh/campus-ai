@@ -39,7 +39,8 @@ class AuthState(StrEnum):
 class AuthChallengeKind(StrEnum):
     """User interactions that a client may need to render."""
 
-    USERNAME_PASSWORD = "username_password"
+    # This protocol label identifies a challenge type and never stores a credential.
+    USERNAME_PASSWORD = "username_password"  # nosec B105
     SMS_CODE = "sms_code"
     QR_SCAN = "qr_scan"
     CAPTCHA = "captcha"

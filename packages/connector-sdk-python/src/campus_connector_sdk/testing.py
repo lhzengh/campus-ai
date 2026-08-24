@@ -6,6 +6,13 @@ from campus_connector_sdk.base import CampusConnector
 from campus_connector_sdk.models import CONTRACT_VERSION, CampusItemBatch, ConnectorCapability, SyncRequest
 
 
+def _require(condition: bool, message: str) -> None:
+    """Raise a stable conformance failure even when Python optimization is enabled."""
+
+    if not condition:
+        raise AssertionError(message)
+
+
 def assert_connector_conformance(
     connector: CampusConnector,
     *,
@@ -17,16 +24,19 @@ def assert_connector_conformance(
     manifest = connector.manifest
     # These checks intentionally use only the public SDK surface so third-party
     # repositories can run the same suite without installing Campus AI Core.
-    assert manifest.contract_version == CONTRACT_VERSION
-    assert ConnectorCapability.SYNC in manifest.capabilities
-    assert manifest.config_schema.get("type") == "object"
+    _require(
+        manifest.contract_version == CONTRACT_VERSION,
+        "Connector contract version does not match the SDK",
+    )
+    _require(ConnectorCapability.SYNC in manifest.capabilities, "Connector must advertise sync capability")
+    _require(manifest.config_schema.get("type") == "object", "Connector configuration must be an object")
 
     normalized = connector.validate_config(valid_config)
-    assert isinstance(normalized, dict)
+    _require(isinstance(normalized, dict), "Connector validation must return a dictionary")
 
     if exercise_sync:
         batch = connector.sync(
             SyncRequest(instance_id="conformance-instance", config=normalized, cursor={}, max_items=10)
         )
-        assert isinstance(batch, CampusItemBatch)
+        _require(isinstance(batch, CampusItemBatch), "Connector sync must return CampusItemBatch")
         CampusItemBatch.model_validate(batch.model_dump(mode="json"))

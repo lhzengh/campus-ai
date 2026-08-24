@@ -75,3 +75,16 @@ def test_connectors_do_not_import_core_or_contain_institution_defaults() -> None
             institution_defaults.append(str(path.relative_to(REPOSITORY_ROOT)))
     assert core_imports == []
     assert institution_defaults == []
+
+
+def test_workflow_uses_read_only_permissions_and_immutable_actions() -> None:
+    workflow = (REPOSITORY_ROOT / ".github/workflows/validation.yml").read_text(encoding="utf-8")
+    remote_actions = [
+        value
+        for value in re.findall(r"^\s*-\s+uses:\s+([^\s#]+)", workflow, re.MULTILINE)
+        if not value.startswith("./")
+    ]
+
+    assert re.search(r"^permissions:\n\s+contents:\s+read$", workflow, re.MULTILINE)
+    assert remote_actions
+    assert all(re.fullmatch(r"[^@\s]+@[0-9a-f]{40}", action) for action in remote_actions)

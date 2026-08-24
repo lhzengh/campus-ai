@@ -9,14 +9,14 @@ description = "User-assisted Playwright Connector for Campus AI"
 requires-python = ">=3.11,<3.15"
 dependencies = [
   "campus-ai-connector-sdk>=0.1,<0.2",
-  "cryptography>=44,<46",
+  "cryptography>=50,<51",
   "playwright>=1.50,<2",
   "selectolax>=0.3,<1",
   "uvicorn[standard]>=0.34,<1",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3,<9"]
+dev = ["pytest>=9.0.3,<10"]
 
 [project.scripts]
 campus-browser-login = "campus_ai_connector_generic_browser.cli:main"
